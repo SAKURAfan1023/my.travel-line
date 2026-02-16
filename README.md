@@ -9,7 +9,8 @@
 
 - 安装依赖
   - `pip install -r requirements.txt`
-- 配置环境变量（.env）
+- 配置环境变量（本地）
+  - 复制 `/.env.example` 为 `/.env`，填入真实 Key
   - `DEEPSEEK_API_KEY`：LLM
   - `AMAP_KEY`：高德地图 API
   - `SERPER_API_KEY`：Serper 搜索
@@ -33,6 +34,7 @@
 前置：Node.js
 
 - `cd front-end`
+- 复制 `/front-end/.env.local.example` 为 `/front-end/.env.local`，填入真实 Key
 - `npm install`
 - `npm run dev`
 
