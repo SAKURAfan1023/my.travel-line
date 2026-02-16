@@ -9,3 +9,6 @@ requests
 chromadb
 sentence-transformers
 ortools
+fastapi
+uvicorn
+

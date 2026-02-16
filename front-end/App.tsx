@@ -31,18 +31,23 @@ const defaultLocations: TripLocation[] = [
 
 const App: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<Screen>('LANDING');
+  const [searchCity, setSearchCity] = useState<string>('');
   // Lifted state for selected locations
-  const [selectedLocations, setSelectedLocations] = useState<SelectedLocation[]>([
-    { ...defaultLocations[0] },
-    { ...defaultLocations[1] }
-  ]);
+  const [selectedLocations, setSelectedLocations] = useState<SelectedLocation[]>([]);
+
+  const handleStartPlanning = (city?: string) => {
+    if (city) {
+      setSearchCity(city);
+    }
+    setCurrentScreen('LOCATION_SELECT');
+  };
 
   const goHome = () => setCurrentScreen('LANDING');
 
   const renderScreen = () => {
     switch (currentScreen) {
       case 'LANDING':
-        return <LandingPage onStartPlanning={() => setCurrentScreen('LOCATION_SELECT')} onMyTrips={() => setCurrentScreen('MY_TRIPS')} />;
+        return <LandingPage onStartPlanning={handleStartPlanning} onMyTrips={() => setCurrentScreen('MY_TRIPS')} />;
       case 'LOCATION_SELECT':
         return (
           <LocationSelectionPage 
@@ -50,6 +55,7 @@ const App: React.FC = () => {
             onNext={() => setCurrentScreen('PREFERENCES')} 
             selectedLocations={selectedLocations}
             setSelectedLocations={setSelectedLocations}
+            initialCity={searchCity}
           />
         );
       case 'PREFERENCES':
