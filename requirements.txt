@@ -1,0 +1,11 @@
+langchain
+crewai
+streamlit
+openai
+python-dotenv
+pydantic
+pandas
+requests
+chromadb
+sentence-transformers
+ortools
