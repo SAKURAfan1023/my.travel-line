@@ -55,7 +55,8 @@ def search_suggestions(query: str):
     params = {
         "key": api_key,
         "keywords": query,
-        "datatype": "all"  # Return all types of POIs
+        "datatype": "all",  # Return all types of POIs
+        "types": "110000|110100|110200|140000|140100|140200|190000" # Scenic, Park, Museum, Place Name
     }
     
     try:

@@ -25,7 +25,19 @@
 - 输出位置
   - `data_pipeline/data/raw_pois.csv`
   - `data_pipeline/data/cleaned_pois.csv`
-  - `data_pipeline/data/chroma_db/`
+  - `data_pipeline/data/chroma_db/`### 1.3 Streamlit 简易界面
+- `streamlit run app.py`
+
+### 1.3 Streamlit 简易界面
+- `streamlit run app.py`
+
+### 1.4 前端原型（本地 Vite）
+前置：Node.js
+
+- `cd front-end`
+- 复制 `/front-end/.env.local.example` 为 `/front-end/.env.local`，填入真实 Key
+- `npm install`
+- `npm run dev`
 
 ### 1.5 后端 API 服务
 前置：Python 环境已就绪。
