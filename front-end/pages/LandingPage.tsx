@@ -127,7 +127,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStartPlanning, onMyTrips })
                 </div>
 
                 {/* Search Bar Trigger */}
-                <div ref={searchRef} className="w-full max-w-[600px] mt-4 relative group/search">
+                <div ref={searchRef} className="w-full max-w-[600px] mt-4 relative group/search z-50">
                   <div className="flex items-center w-full bg-white rounded-2xl shadow-2xl shadow-black/20 overflow-hidden h-16 ring-4 ring-white/20 focus-within:ring-primary/40 transition-all transform hover:scale-[1.01]">
                     <div className="pl-6 pr-3 text-slate-400">
                       <span className="material-symbols-outlined text-3xl">search</span>
