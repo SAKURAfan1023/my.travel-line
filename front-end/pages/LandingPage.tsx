@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSettings } from '../contexts/SettingsContext';
+import { SearchLocation } from '../types';
 
 interface LandingPageProps {
-  onStartPlanning: (city?: string) => void;
+  onStartPlanning: (location?: SearchLocation) => void;
   onMyTrips: () => void;
 }
 
@@ -37,7 +38,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStartPlanning, onMyTrips })
         setSuggestions([]);
         setShowSuggestions(false);
       }
-    }, 300);
+    }, 1000);
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
@@ -53,10 +54,20 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStartPlanning, onMyTrips })
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleSelectCity = (city: string) => {
-    setSearchQuery(city);
+  const handleSelectCity = (selection: string | SearchSuggestion) => {
+    let location: SearchLocation;
+    if (typeof selection === 'string') {
+      location = { name: selection };
+    } else {
+      location = {
+        name: selection.name,
+        adcode: selection.adcode,
+        district: selection.district
+      };
+    }
+    setSearchQuery(location.name);
     setShowSuggestions(false);
-    onStartPlanning(city);
+    onStartPlanning(location);
   };
 
   return (
@@ -103,7 +114,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStartPlanning, onMyTrips })
         <main className="flex-1 overflow-y-auto scroll-smooth">
           <div className="p-6 lg:p-10 max-w-[1200px] mx-auto pb-24 h-full flex flex-col justify-center">
             {/* Hero */}
-            <div className="w-full relative min-h-[500px] flex flex-col items-center justify-center text-center p-8 mb-10 group isolate">
+            <div className="w-full relative min-h-[500px] flex flex-col items-center justify-center text-center p-8 mb-10 group isolate z-10">
               {/* Background Layer with Overflow Hidden */}
               <div className="absolute inset-0 rounded-2xl overflow-hidden shadow-2xl z-0">
                 <div className="absolute inset-0 bg-cover bg-center transition-transform duration-[2000ms] group-hover:scale-105" style={{ backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuDf1pqopAS00TUFrQ_3wgZSxBfcwxO7yPoal4jkkaE8-oZIb-uglYr99Q9Cbii01xKHV-DcOn1lL0Yw3rCdjdkJeVS9T9e9mYqdQGIMSe4kPwCn5usX5oweddg1ippKQPmuRdNx81dS74hADkEzYI-rORL60_Bg5XzYdcN4yR3EicxDJ65hLzwoj3osCZbdshvgTN8ig5cFk8m8exEQmgwCg6FyUwhnV9aHG7SITfNSaPlPs1EFmB1UYictWLblcPuNb-tcQQ")' }}></div>
@@ -156,12 +167,12 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStartPlanning, onMyTrips })
 
                   {/* Suggestions Dropdown */}
                   {showSuggestions && suggestions.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl overflow-hidden z-50 border border-slate-100">
+                    <div className="absolute top-64px left-0 right-0 mt-2 bg-white rounded-xl shadow-xl overflow-hidden z-50 border border-slate-100">
                       {suggestions.map((suggestion, index) => (
                         <div
                           key={`${suggestion.adcode}-${index}`}
                           className="px-6 py-3 hover:bg-slate-50 cursor-pointer flex items-center justify-between group"
-                          onClick={() => handleSelectCity(suggestion.name)}
+                          onClick={() => handleSelectCity(suggestion)}
                         >
                           <div>
                             <span className="text-slate-800 font-medium">{suggestion.name}</span>
@@ -186,7 +197,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStartPlanning, onMyTrips })
             </div>
 
             {/* Social Proof / Trusted By (Visual Filler) */}
-            <div className="flex flex-col items-center gap-4 opacity-60">
+            <div className="flex flex-col items-center gap-4 opacity-60 z-[1]">
               <p className="text-sm font-bold uppercase tracking-widest text-slate-400">Trusted by travelers worldwide</p>
               <div className="flex gap-8 grayscale opacity-70">
                 <span className="material-symbols-outlined text-3xl">flight</span>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TripLocation, SelectedLocation } from '../types';
+import { TripLocation, SelectedLocation, SearchLocation } from '../types';
 import { useSettings } from '../contexts/SettingsContext';
 
 interface LocationSelectionPageProps {
@@ -7,22 +7,103 @@ interface LocationSelectionPageProps {
     onNext: () => void;
     selectedLocations: SelectedLocation[];
     setSelectedLocations: React.Dispatch<React.SetStateAction<SelectedLocation[]>>;
-    initialCity?: string;
+    initialLocation?: SearchLocation;
 }
 
 // Remove static recommendations array
 // const recommendations: TripLocation[] = [...]
 
 const tagIcons: Record<string, string> = {
-    'Coastal': 'water_drop',
-    'Relaxation': 'spa',
+    'Water Drop': 'water_drop',
+    'Spa': 'spa',
     'Culture': 'temple_buddhist',
     'History': 'history_edu',
-    'Nature': 'park',
+    'Historical': 'history_edu', // Alias
+    'Park': 'park',
     'Hiking': 'hiking',
     'Adventure': 'landscape',
     'Food': 'restaurant',
-    'Beach': 'surfing'
+    'Beach': 'surfing',
+    'City Break': 'location_city',
+    'Sightseeing': 'camera_alt'
+};
+
+const getTagColor = (tag: string) => {
+    // Unified Apple-style frosted glass effect (white background with blur)
+    return 'bg-white/80 backdrop-blur-md text-slate-700 border border-white/40 shadow-sm hover:bg-white hover:shadow-md transition-all';
+};
+
+const placeholderImageUrl = 'https://placehold.co/600x400/EEE/999?text=%E6%9A%82%E6%97%A0%E5%9B%BE%E7%89%87';
+
+const normalizeImageUrl = (imageUrl?: string) => {
+    if (!imageUrl) return placeholderImageUrl;
+    const lowerUrl = imageUrl.toLowerCase();
+    if (lowerUrl.includes('placeholder')) {
+        return placeholderImageUrl;
+    }
+    return imageUrl;
+};
+
+const entranceMarkerPattern = /(入口|[东南西北]门|正门|侧门|大门|出入口)/;
+
+const normalizeLocationName = (name: string) => {
+    const trimmed = name.trim();
+    const parenMatch = trimmed.match(/^(.*?)[（(](.*?)[)）]\s*$/);
+    if (parenMatch && entranceMarkerPattern.test(parenMatch[2])) {
+        return parenMatch[1].trim();
+    }
+    const separatorMatch = trimmed.match(/^(.*?)(?:[-·/、\s]+)(.+)$/);
+    if (separatorMatch && entranceMarkerPattern.test(separatorMatch[2])) {
+        return separatorMatch[1].trim();
+    }
+    return trimmed;
+};
+
+const prepareRecommendations = (locations: TripLocation[]) => {
+    const byName = new Map<string, { location: TripLocation; isEntrance: boolean }>();
+
+    locations.forEach((location) => {
+        const baseName = normalizeLocationName(location.name);
+        const isEntrance = baseName !== location.name;
+        const normalizedLocation = {
+            ...location,
+            name: baseName,
+            image: normalizeImageUrl(location.image)
+        };
+
+        const existing = byName.get(baseName);
+        if (!existing) {
+            byName.set(baseName, { location: normalizedLocation, isEntrance });
+            return;
+        }
+
+        if (existing.isEntrance && !isEntrance) {
+            byName.set(baseName, { location: normalizedLocation, isEntrance });
+            return;
+        }
+
+        if (existing.location.image === placeholderImageUrl && normalizedLocation.image !== placeholderImageUrl) {
+            byName.set(baseName, { location: normalizedLocation, isEntrance });
+        }
+    });
+
+    return Array.from(byName.values()).map((entry) => entry.location);
+};
+
+const buildTagCounts = (locations: TripLocation[]) => {
+    const counts: Record<string, number> = {};
+    locations.forEach((location) => {
+        location.tags?.forEach((tag) => {
+            counts[tag] = (counts[tag] || 0) + 1;
+        });
+    });
+    return counts;
+};
+
+const formatLocationArea = (location: TripLocation) => {
+    const segments = [location.province, location.city, location.district].filter(Boolean) as string[];
+    const normalized = segments.filter((segment, index) => index === 0 || segment !== segments[index - 1]);
+    return normalized.join(' · ');
 };
 
 const LocationSelectionPage: React.FC<LocationSelectionPageProps> = ({
@@ -30,16 +111,30 @@ const LocationSelectionPage: React.FC<LocationSelectionPageProps> = ({
     onNext,
     selectedLocations,
     setSelectedLocations,
-    initialCity
+    initialLocation
 }) => {
     const { t, theme, toggleTheme, language, setLanguage } = useSettings();
-    // If initialCity is passed, use it as default search query
-    const [searchQuery, setSearchQuery] = useState(initialCity || '');
+    // If initialLocation is passed, use its name as default search query
+    const [searchQuery, setSearchQuery] = useState(initialLocation?.name || '');
     const [recommendations, setRecommendations] = useState<TripLocation[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [activeFilter, setActiveFilter] = useState('All');
+    const [tagCounts, setTagCounts] = useState<Record<string, number>>({});
+    const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const filterRef = React.useRef<HTMLDivElement>(null);
 
     const [isMobileBasketOpen, setIsMobileBasketOpen] = useState(false);
+
+    // Close filter dropdown when clicking outside
+    React.useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+                setIsFilterOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     // State for the configuration modal
     const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
@@ -50,20 +145,20 @@ const LocationSelectionPage: React.FC<LocationSelectionPageProps> = ({
             setIsLoading(true);
             try {
                 // Build query params
-                const city = initialCity || "Beijing"; // Default city if none
-                let tags = activeFilter !== 'All' ? activeFilter : '';
+                let targetCity = searchQuery || "Beijing"; // Default city if none
+                const tags = activeFilter !== 'All' ? activeFilter : '';
 
-                // If user typed in search bar, treat it as keyword search if API supports, 
-                // or here we assume searchQuery is the City if not "All". 
-                // Actually, let's assume the page is for selecting spots IN a city.
-                // The landing page sets the city.
-
-                const targetCity = searchQuery || initialCity || "Beijing";
+                // If user hasn't changed the query and we have an adcode from the initial selection, use it.
+                if (initialLocation && searchQuery === initialLocation.name && initialLocation.adcode) {
+                    targetCity = initialLocation.adcode;
+                }
 
                 const response = await fetch(`http://localhost:8000/api/recommend-locations?city=${encodeURIComponent(targetCity)}&tags=${encodeURIComponent(tags)}`);
                 if (response.ok) {
                     const data = await response.json();
-                    setRecommendations(data);
+                    const preparedLocations = prepareRecommendations(data.locations || []);
+                    setRecommendations(preparedLocations);
+                    setTagCounts(buildTagCounts(preparedLocations));
                 }
             } catch (error) {
                 console.error("Failed to fetch locations", error);
@@ -78,7 +173,7 @@ const LocationSelectionPage: React.FC<LocationSelectionPageProps> = ({
         }, 500);
 
         return () => clearTimeout(timer);
-    }, [searchQuery, activeFilter, initialCity]);
+    }, [searchQuery, activeFilter, initialLocation]);
 
 
     const addToBasket = (place: TripLocation) => {
@@ -121,13 +216,18 @@ const LocationSelectionPage: React.FC<LocationSelectionPageProps> = ({
                     >
                         <div className="w-16 h-16 rounded-lg bg-cover bg-center shrink-0" style={{ backgroundImage: `url("${item.image}")` }}></div>
                         <div className="flex flex-col justify-center flex-1 min-w-0">
-                            <p className="font-bold text-sm text-[#111418] truncate">{item.name}, {item.country}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                                <span className="text-xs font-medium text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
+                            <p className="font-bold text-sm text-[#111418] truncate">{item.name}</p>
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                <span className="text-[10px] font-bold text-slate-600 bg-white px-2 py-0.5 rounded-full border border-slate-200 shadow-sm whitespace-nowrap">
                                     {item.daysRecommended} {t('common.days')}
                                 </span>
+                                {item.tags && item.tags.slice(0, 2).map(tag => (
+                                    <span key={tag} className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shadow-sm whitespace-nowrap ${getTagColor(tag)}`}>
+                                        {tag}
+                                    </span>
+                                ))}
                                 {item.userNotes && (
-                                    <span className="material-symbols-outlined text-xs text-slate-400">sticky_note_2</span>
+                                    <span className="material-symbols-outlined text-xs text-slate-400" title={t('location.has_notes') || "Has notes"}>sticky_note_2</span>
                                 )}
                             </div>
                         </div>
@@ -227,7 +327,7 @@ const LocationSelectionPage: React.FC<LocationSelectionPageProps> = ({
                                 <h1 className="text-3xl font-bold text-[#111418] dark:text-white mb-2">{t('location.title')}</h1>
                                 <p className="text-slate-500">{t('location.subtitle')}</p>
                             </div>
-                            <div className="hidden md:block max-w-md text-right pb-1">
+                            <div className="hidden md:block text-right pb-1">
                                 <p className="text-sm text-slate-400 leading-relaxed">
                                     {t('location.instruction')}
                                 </p>
@@ -235,26 +335,37 @@ const LocationSelectionPage: React.FC<LocationSelectionPageProps> = ({
                         </div>
 
                         {/* Filters */}
-                        <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide mb-4">
+                        <div className="flex flex-wrap gap-2 mb-6" ref={filterRef}>
                             <button
                                 onClick={() => setActiveFilter('All')}
-                                className={`flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-lg px-4 transition-transform active:scale-95 shadow-md ${activeFilter === 'All' ? 'bg-[#111418] text-white' : 'bg-white border border-slate-200 text-[#111418]'}`}
+                                className={`flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-lg px-4 transition-transform active:scale-95 shadow-sm border ${activeFilter === 'All' ? 'bg-black/90 backdrop-blur-md text-white border-transparent shadow-md' : 'bg-white/60 backdrop-blur-md border-white/40 text-slate-700 hover:bg-white hover:shadow-md'}`}
                             >
                                 <span className="text-sm font-medium">{t('filter.all')}</span>
                             </button>
-                            {['Nature', 'City Break', 'Historical', 'Coastal'].map((filter) => {
-                                const key = filter.toLowerCase().replace(' ', '_');
-                                return (
-                                    <button
-                                        key={filter}
-                                        onClick={() => setActiveFilter(filter)}
-                                        className={`flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-lg px-4 transition-all ${activeFilter === filter ? 'bg-[#111418] text-white shadow-md' : 'bg-white border border-slate-200 hover:border-primary/50 hover:bg-slate-50 text-[#111418]'}`}
-                                    >
-                                        <span className="material-symbols-outlined text-[18px]">{tagIcons[filter] || 'explore'}</span>
-                                        <span className="text-sm font-medium">{t(`filter.${key}`)}</span>
-                                    </button>
-                                )
-                            })}
+
+                            {/* Sorted Filters by Count */}
+                            {Object.entries(tagCounts)
+                                .sort((a, b) => (b[1] as number) - (a[1] as number))
+                                .map(([tag, count]) => {
+                                    if (count === 0) return null;
+                                    const key = tag.toLowerCase().replace(' ', '_');
+                                    const isActive = activeFilter === tag;
+                                    return (
+                                        <button
+                                            key={tag}
+                                            onClick={() => setActiveFilter(tag)}
+                                            className={`flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-lg px-4 transition-all active:scale-95 border ${isActive ? 'bg-black/90 backdrop-blur-md text-white border-transparent shadow-md' : 'bg-white/60 backdrop-blur-md border-white/40 text-slate-700 hover:bg-white hover:shadow-md'}`}
+                                        >
+                                            <span className="material-symbols-outlined text-[18px]">{tagIcons[tag] || 'explore'}</span>
+                                            <span className="text-sm font-medium">{tag}</span>
+                                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-black/5 text-slate-500'}`}>
+                                                {count}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+
+                            {/* Dropdown for More (if needed in future, currently showing all valid tags) */}
                         </div>
 
                         {/* Grid */}
@@ -269,8 +380,9 @@ const LocationSelectionPage: React.FC<LocationSelectionPageProps> = ({
                                 </div>
                             ) : filteredRecommendations.map((place) => {
                                 const isSelected = basket.some(b => b.id === place.id);
+                                const locationText = formatLocationArea(place);
                                 return (
-                                    <div key={place.id} className={`group flex flex-col gap-3 bg-white p-3 rounded-2xl border transition-all duration-300 ${isSelected ? 'border-primary ring-1 ring-primary shadow-lg shadow-primary/10' : 'border-slate-100 hover:shadow-lg hover:shadow-primary/5'}`}>
+                                    <div key={place.id} className={`group flex flex-col gap-3 bg-white p-3 rounded-2xl border transition-all duration-300 h-full ${isSelected ? 'border-primary ring-1 ring-primary shadow-lg shadow-primary/10' : 'border-slate-100 hover:shadow-lg hover:shadow-primary/5'}`}>
                                         <div className="w-full relative aspect-[4/3] rounded-xl overflow-hidden">
                                             <div className="absolute top-3 right-3 z-10 bg-white/90 backdrop-blur rounded-full px-2 py-1 flex items-center gap-1 shadow-sm">
                                                 <span className="material-symbols-outlined text-yellow-500 text-[16px] fill">star</span>
@@ -299,16 +411,29 @@ const LocationSelectionPage: React.FC<LocationSelectionPageProps> = ({
                                                 </button>
                                             )}
                                         </div>
-                                        <div className="px-1 pb-1">
+                                        <div className="px-1 pb-1 flex flex-col flex-1">
                                             <div className="flex justify-between items-start">
-                                                <div>
-                                                    <p className="text-[#111418] text-lg font-bold leading-normal">{place.name}, {place.country}</p>
-                                                    <p className="text-[#617589] text-sm font-medium mt-0.5 flex items-center gap-1">
-                                                        <span className="material-symbols-outlined text-[16px]">{tagIcons[place.tags[0]] || 'place'}</span>
-                                                        {place.tags.join(' • ')}
+                                                <div className="flex flex-col">
+                                                    <p className="text-[#111418] text-lg font-bold leading-normal">{place.name}</p>
+                                                    <p className="text-[#617589] text-sm font-medium mt-0.5 flex flex-wrap items-center gap-1.5">
+                                                        {place.tags && place.tags.length > 0 ? (
+                                                            place.tags.map(tag => (
+                                                                <span key={tag} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border shadow-sm whitespace-nowrap flex items-center gap-0.5 ${getTagColor(tag)}`}>
+                                                                    <span className="material-symbols-outlined text-[10px]">{tagIcons[tag] || 'place'}</span>
+                                                                    {tag}
+                                                                </span>
+                                                            ))
+                                                        ) : (
+                                                            <span className="text-xs text-slate-400">No tags</span>
+                                                        )}
                                                     </p>
                                                 </div>
                                             </div>
+
+                                        </div>
+                                        <div className={`mt-3 text-xs font-medium text-slate-500 flex items-center gap-1.5 min-h-[20px] ${locationText ? '' : 'opacity-0'}`} aria-hidden={!locationText}>
+                                            <span className="material-symbols-outlined text-[14px]">location_on</span>
+                                            <span>{locationText || ' '}</span>
                                         </div>
                                     </div>
                                 );

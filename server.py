@@ -1,4 +1,5 @@
 import os
+import re
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,6 +27,9 @@ class TripLocation(BaseModel):
     id: str
     name: str
     country: str
+    province: Optional[str] = None
+    city: Optional[str] = None
+    district: Optional[str] = None
     image: Optional[str] = None
     rating: float
     tags: List[str]
@@ -35,6 +39,30 @@ class SearchSuggestion(BaseModel):
     name: str
     district: str
     adcode: str
+
+# --- Helper Functions ---
+
+def resolve_adcode(api_key: str, query: str) -> Optional[str]:
+    """
+    Resolve a city name/query to an adcode using AMap InputTips.
+    """
+    url = "https://restapi.amap.com/v3/assistant/inputtips"
+    params = {
+        "key": api_key,
+        "keywords": query,
+        "datatype": "all"
+    }
+    try:
+        response = requests.get(url, params=params)
+        data = response.json()
+        if data["status"] == "1" and "tips" in data:
+            for tip in data["tips"]:
+                 # Return the first adcode found
+                 if tip.get("adcode"):
+                     return tip.get("adcode")
+    except Exception as e:
+        print(f"Error resolving adcode: {e}")
+    return None
 
 # --- API Endpoints ---
 
@@ -79,66 +107,75 @@ def search_suggestions(query: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/recommend-locations", response_model=List[TripLocation])
+@app.get("/api/recommend-locations", response_model=dict)
 def recommend_locations(city: str, tags: Optional[str] = None):
     """
     Get recommended locations (POIs) based on city and tags.
     Calls AMap Place API.
+    Returns { "locations": [...], "tag_counts": { "Nature": 5, ... } }
     """
     api_key = os.getenv("AMAP_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="AMAP_KEY not configured")
 
-    # Map frontend tags to AMap POI types or keywords
-    # 110000: Scenic Spot
-    # 110100: Park
-    # 140000: Culture/Museum
-    # 190000: Place Name
-    keywords = "景点"
-    types = "110000|110100|140000"
-    
-    if tags:
-        tag_list = tags.split(",")
-        if "Nature" in tag_list:
-            types += "|110100|110200" # Park, Botanical Garden
-        if "Historical" in tag_list:
-            types += "|140000" # Museum/Culture
-        if "City Break" in tag_list:
-             types += "|050000|060000" # Dining, Shopping
-        if "Coastal" in tag_list:
-            keywords += "|海滨|沙滩"
+    # If city is not numeric (adcode), try to resolve it
+    if not city.isdigit():
+        resolved_adcode = resolve_adcode(api_key, city)
+        if resolved_adcode:
+            city = resolved_adcode
 
+    # 1. First, fetch ALL relevant POIs for the city to calculate tag counts globally for this city
+    # We'll use a broad search first
+    base_keywords = "景点"
+    base_types = "110000|110100|140000|060100|190000"
+    
     url = "https://restapi.amap.com/v3/place/text"
     params = {
         "key": api_key,
-        "keywords": keywords,
+        "keywords": base_keywords,
         "city": city,
-        "types": types,
+        "types": base_types,
         "citylimit": "true",
         "extensions": "all",
-        "offset": 20,
+        "offset": 50, # Fetch more for better counts
         "page": 1
+    }
+
+    all_locations = []
+    tag_counts = {
+        "Nature": 0,
+        "Historical": 0,
+        "City Break": 0,
+        "Coastal": 0,
+        "Sightseeing": 0
     }
 
     try:
         response = requests.get(url, params=params)
         data = response.json()
         
-        recommendations = []
         if data["status"] == "1" and "pois" in data:
             for poi in data["pois"]:
-                # Map AMap POI to TripLocation
-                # Image: AMap POI photos are lists of objects.
-                image_url = ""
+                name = poi.get("name", "")
+                poi_type = poi.get("type", "")
+                raw_image_url = ""
                 if poi.get("photos") and len(poi["photos"]) > 0:
-                    image_url = poi["photos"][0].get("url", "")
-                
-                # If no image, use a placeholder or leave empty to let frontend handle
+                    raw_image_url = poi["photos"][0].get("url", "")
+                lower_name = name.strip()
+                entrance_markers = ["入口", "出入口", "正门", "侧门", "大门", "东门", "西门", "南门", "北门", "停车场入口", "景区入口"]
+                is_entrance_name = any(marker in lower_name for marker in entrance_markers)
+                ends_with_gate = lower_name.endswith(("入口", "出入口", "正门", "侧门", "大门", "东门", "西门", "南门", "北门"))
+                bracket_gate = bool(re.search(r"[（(].*(入口|出入口|正门|侧门|大门|[东南西北]门).*[)）]", lower_name))
+                type_has_gate = "出入口" in poi_type or "门" in poi_type
+                if (is_entrance_name or ends_with_gate or bracket_gate or type_has_gate) and not raw_image_url:
+                    continue
+
+                # Map AMap POI to TripLocation
+                image_url = raw_image_url
                 if not image_url:
                     image_url = "https://via.placeholder.com/400x300?text=No+Image"
 
-                # Rating: AMap returns string or list, handle safely
-                rating = 4.5 # Default
+                rating = 4.5
                 biz_ext = poi.get("biz_ext", {})
                 if isinstance(biz_ext, dict):
                     r_str = biz_ext.get("rating")
@@ -148,30 +185,57 @@ def recommend_locations(city: str, tags: Optional[str] = None):
                         except:
                             pass
                 
-                # Tags: Derive from type
-                poi_type = poi.get("type", "")
+                # Derive tags
                 derived_tags = []
-                if "风景" in poi_type or "景点" in poi_type: derived_tags.append("Sightseeing")
-                if "公园" in poi_type: derived_tags.append("Nature")
-                if "博物馆" in poi_type or "古迹" in poi_type: derived_tags.append("History")
+                
+                is_nature = "公园" in poi_type or "植物园" in poi_type or "山" in name
+                is_history = "博物馆" in poi_type or "古迹" in poi_type or "寺" in name
+                is_city = "步行街" in poi_type or "广场" in poi_type or "商场" in poi_type or "商业" in poi_type
+                is_coastal = "海滨" in poi_type or "浴场" in poi_type or "岛" in name
+                is_sightseeing = "风景" in poi_type or "景点" in poi_type
+
+                if is_nature: derived_tags.append("Nature"); tag_counts["Nature"] += 1
+                if is_history: derived_tags.append("Historical"); tag_counts["Historical"] += 1
+                if is_city: derived_tags.append("City Break"); tag_counts["City Break"] += 1
+                if is_coastal: derived_tags.append("Coastal"); tag_counts["Coastal"] += 1
+                if is_sightseeing: derived_tags.append("Sightseeing"); tag_counts["Sightseeing"] += 1
                 
                 if not derived_tags:
                     derived_tags = ["General"]
 
-                recommendations.append(TripLocation(
+                loc = TripLocation(
                     id=poi.get("id"),
                     name=poi.get("name"),
-                    country="China", # AMap mostly China
+                    country="China",
+                    province=poi.get("pname"),
+                    city=poi.get("cityname"),
+                    district=poi.get("adname"),
                     image=image_url,
                     rating=rating,
                     tags=derived_tags,
-                    daysRecommended=1 # Default
-                ))
-        return recommendations
+                    daysRecommended=1
+                )
+                all_locations.append(loc)
+
+        # 2. Filter locations based on requested tags
+        filtered_locations = []
+        if tags and tags != "All":
+            requested_tags = tags.split(",")
+            for loc in all_locations:
+                # Check if location has ANY of the requested tags
+                if any(t in requested_tags for t in loc.tags):
+                    filtered_locations.append(loc)
+        else:
+            filtered_locations = all_locations
+
+        return {
+            "locations": filtered_locations,
+            "tag_counts": tag_counts
+        }
+
     except Exception as e:
         print(f"Error fetching POIs: {e}")
-        # Return empty list or mock data on error? For now empty.
-        return []
+        return {"locations": [], "tag_counts": {}}
 
 from crewai import Crew, Process
 from agents import TravelAgents
@@ -261,4 +325,5 @@ def generate_itinerary(prefs: TripPreferences):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Use reload=True for development
+    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)

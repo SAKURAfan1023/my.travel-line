@@ -4,7 +4,7 @@ import LocationSelectionPage from './pages/LocationSelectionPage';
 import PreferencesPage from './pages/PreferencesPage';
 import ItineraryPage from './pages/ItineraryPage';
 import MyTripsPage from './pages/MyTripsPage';
-import { Screen, SelectedLocation, TripLocation } from './types';
+import { Screen, SelectedLocation, TripLocation, SearchLocation } from './types';
 import { SettingsProvider } from './contexts/SettingsContext';
 
 // Default recommendations data to initialize if needed, or we can fetch/import
@@ -31,13 +31,13 @@ const defaultLocations: TripLocation[] = [
 
 const App: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<Screen>('LANDING');
-  const [searchCity, setSearchCity] = useState<string>('');
+  const [searchLocation, setSearchLocation] = useState<SearchLocation | undefined>(undefined);
   // Lifted state for selected locations
   const [selectedLocations, setSelectedLocations] = useState<SelectedLocation[]>([]);
 
-  const handleStartPlanning = (city?: string) => {
-    if (city) {
-      setSearchCity(city);
+  const handleStartPlanning = (location?: SearchLocation) => {
+    if (location) {
+      setSearchLocation(location);
     }
     setCurrentScreen('LOCATION_SELECT');
   };
@@ -50,18 +50,18 @@ const App: React.FC = () => {
         return <LandingPage onStartPlanning={handleStartPlanning} onMyTrips={() => setCurrentScreen('MY_TRIPS')} />;
       case 'LOCATION_SELECT':
         return (
-          <LocationSelectionPage 
-            onBack={() => setCurrentScreen('LANDING')} 
-            onNext={() => setCurrentScreen('PREFERENCES')} 
+          <LocationSelectionPage
+            onBack={() => setCurrentScreen('LANDING')}
+            onNext={() => setCurrentScreen('PREFERENCES')}
             selectedLocations={selectedLocations}
             setSelectedLocations={setSelectedLocations}
-            initialCity={searchCity}
+            initialLocation={searchLocation}
           />
         );
       case 'PREFERENCES':
         return (
-          <PreferencesPage 
-            onBack={() => setCurrentScreen('LOCATION_SELECT')} 
+          <PreferencesPage
+            onBack={() => setCurrentScreen('LOCATION_SELECT')}
             onNext={() => setCurrentScreen('ITINERARY')}
             onHome={goHome}
             selectedLocations={selectedLocations}

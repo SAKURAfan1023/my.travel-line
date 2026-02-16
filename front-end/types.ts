@@ -4,6 +4,9 @@ export interface TripLocation {
   id: string;
   name: string;
   country: string;
+  province?: string;
+  city?: string;
+  district?: string;
   image: string;
   rating: number;
   tags: string[];
@@ -16,8 +19,14 @@ export interface SelectedLocation extends TripLocation {
   assignedStartDate?: string; // ISO string for easier serialization
   assignedEndDate?: string;
   // User defined duration
-  stayDays?: number; 
+  stayDays?: number;
   stayHours?: number;
+}
+
+export interface SearchLocation {
+  name: string;
+  adcode?: string;
+  district?: string;
 }
 
 export interface TimelineEvent {
