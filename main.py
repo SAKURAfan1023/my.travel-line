@@ -9,8 +9,8 @@ load_dotenv()
 
 # Force OpenAI SDK to use DeepSeek configuration
 os.environ["OPENAI_API_KEY"] = os.getenv("DEEPSEEK_API_KEY")
-os.environ["OPENAI_API_BASE"] = "https://api.deepseek.com"
-os.environ["OPENAI_BASE_URL"] = "https://api.deepseek.com"
+os.environ["OPENAI_API_BASE"] = os.getenv("DEEPSEEK_API_BASE")
+os.environ["OPENAI_BASE_URL"] = os.getenv("DEEPSEEK_API_BASE")
 
 def main():
     print("## Welcome to the Travel AI Planner ##")

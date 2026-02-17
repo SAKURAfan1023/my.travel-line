@@ -15,8 +15,8 @@ const PreferencesPage: React.FC<PreferencesPageProps> = ({ onBack, onNext, onHom
 
     // Optional Section States
     const [enableTransport, setEnableTransport] = useState(false);
-    const [enableInterests, setEnableInterests] = useState(false);
-    const [enableDetailedBudget, setEnableDetailedBudget] = useState(false);
+    const [enableAccommodation, setEnableAccommodation] = useState(false);
+    const [enableDining, setEnableDining] = useState(false);
 
     const [transport, setTransport] = useState('Flight');
 
@@ -84,8 +84,6 @@ const PreferencesPage: React.FC<PreferencesPageProps> = ({ onBack, onNext, onHom
     }, [startDate, selectedLocations]);
 
     // State for preferences input
-    const [preferences, setPreferences] = useState<string[]>(['Local Cuisine']);
-    const [prefInput, setPrefInput] = useState('');
 
     // Total Budget State (Required)
     const [totalBudget, setTotalBudget] = useState<[number, number]>([3000, 8000]);
@@ -93,7 +91,10 @@ const PreferencesPage: React.FC<PreferencesPageProps> = ({ onBack, onNext, onHom
     // Detailed Budget State (Optional)
     const [budget, setBudget] = useState<[number, number]>([150, 600]);
     const [diningBudget, setDiningBudget] = useState<[number, number]>([20, 80]);
+    const [accommodationPrefs, setAccommodationPrefs] = useState<string[]>([]);
     const [diningPrefs, setDiningPrefs] = useState<string[]>(['Local', 'Street Food']);
+    const [accommodationInput, setAccommodationInput] = useState('');
+    const [diningInput, setDiningInput] = useState('');
 
     // Modal State for Location Details
     const [editingLocId, setEditingLocId] = useState<string | null>(null);
@@ -105,14 +106,14 @@ const PreferencesPage: React.FC<PreferencesPageProps> = ({ onBack, onNext, onHom
     const budgetSliderRef = useRef<HTMLDivElement>(null);
     const diningSliderRef = useRef<HTMLDivElement>(null);
 
-    const PRESETS = ['Vegan', 'Vegetarian', 'Halal', 'Museums', 'Nature', 'Shopping', 'Nightlife', 'History', 'Art'];
+    const ACCOMMODATION_PRESETS = ['Hotel', 'Boutique', 'Hostel', 'Resort', 'Apartment', 'Budget', 'Family', 'Luxury', 'Business'];
     const DINING_PRESETS = ['Street Food', 'Fine Dining', 'Local', 'Vegan', 'Seafood', 'Italian', 'Asian', 'Halal', 'Steakhouse'];
 
     // Unified Slider Logic
     const startDrag = (e: React.MouseEvent, slider: 'total' | 'budget' | 'dining', handle: 'min' | 'max') => {
         e.preventDefault();
-        if (slider === 'budget' && !enableDetailedBudget) return;
-        if (slider === 'dining' && !enableDetailedBudget) return;
+        if (slider === 'budget' && !enableAccommodation) return;
+        if (slider === 'dining' && !enableDining) return;
 
         activeSlider.current = slider;
         draggingHandle.current = handle;
@@ -176,28 +177,53 @@ const PreferencesPage: React.FC<PreferencesPageProps> = ({ onBack, onNext, onHom
         }
     }, []);
 
-    const addPreference = () => {
-        if (prefInput.trim() && !preferences.includes(prefInput.trim())) {
-            setPreferences([...preferences, prefInput.trim()]);
-            setPrefInput('');
+    const addAccommodationPref = () => {
+        if (accommodationInput.trim() && !accommodationPrefs.includes(accommodationInput.trim())) {
+            setAccommodationPrefs([...accommodationPrefs, accommodationInput.trim()]);
+            setAccommodationInput('');
         }
     };
 
-    const handlePrefKeyDown = (e: React.KeyboardEvent) => {
+    const handleAccommodationKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
-            addPreference();
+            addAccommodationPref();
         }
     };
 
-    const removePreference = (pref: string) => {
-        setPreferences(preferences.filter(p => p !== pref));
+    const removeAccommodationPref = (pref: string) => {
+        setAccommodationPrefs(accommodationPrefs.filter(p => p !== pref));
     };
 
-    const togglePreset = (preset: string) => {
-        if (preferences.includes(preset)) {
-            removePreference(preset);
+    const toggleAccommodationPreset = (preset: string) => {
+        if (accommodationPrefs.includes(preset)) {
+            removeAccommodationPref(preset);
         } else {
-            setPreferences([...preferences, preset]);
+            setAccommodationPrefs([...accommodationPrefs, preset]);
+        }
+    };
+
+    const addDiningPref = () => {
+        if (diningInput.trim() && !diningPrefs.includes(diningInput.trim())) {
+            setDiningPrefs([...diningPrefs, diningInput.trim()]);
+            setDiningInput('');
+        }
+    };
+
+    const handleDiningKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            addDiningPref();
+        }
+    };
+
+    const removeDiningPref = (pref: string) => {
+        setDiningPrefs(diningPrefs.filter(p => p !== pref));
+    };
+
+    const toggleDiningPreset = (preset: string) => {
+        if (diningPrefs.includes(preset)) {
+            removeDiningPref(preset);
+        } else {
+            setDiningPrefs([...diningPrefs, preset]);
         }
     };
 
@@ -333,15 +359,26 @@ const PreferencesPage: React.FC<PreferencesPageProps> = ({ onBack, onNext, onHom
             return;
         }
 
-        const payload = {
+        const payload: Record<string, unknown> = {
             city: selectedLocations[0]?.country || "Unknown", // Simplification
             days: selectedDuration,
+            start_date: startDate.toISOString(),
+            end_date: endDate.toISOString(),
             selected_locations: selectedLocations,
-            budget: totalBudget,
-            interests: preferences,
-            transport: transport,
-            dining_prefs: diningPrefs
+            budget: totalBudget
         };
+
+        if (enableTransport) {
+            payload.transport = transport;
+        }
+
+        if (enableAccommodation) {
+            payload.accommodation_prefs = accommodationPrefs;
+        }
+
+        if (enableDining) {
+            payload.dining_prefs = diningPrefs;
+        }
 
         try {
             // Show loading state here ideally
@@ -462,7 +499,7 @@ const PreferencesPage: React.FC<PreferencesPageProps> = ({ onBack, onNext, onHom
                                                 <p className="text-[#111418] dark:text-white text-base font-bold text-center flex-1">{formatMonthYear(viewDate)}</p>
                                             </div>
                                             <div className="grid grid-cols-7 gap-y-1">
-                                                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => <p key={d} className="text-[#617589] text-[12px] font-bold text-center h-8 flex items-center justify-center">{d}</p>)}
+                                                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <p key={i} className="text-[#617589] text-[12px] font-bold text-center h-8 flex items-center justify-center">{d}</p>)}
                                                 {renderCalendarGrid(viewDate.getFullYear(), viewDate.getMonth())}
                                             </div>
                                         </div>
@@ -473,7 +510,7 @@ const PreferencesPage: React.FC<PreferencesPageProps> = ({ onBack, onNext, onHom
                                                 <button onClick={() => changeMonth(1)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full text-slate-500 hover:text-primary"><span className="material-symbols-outlined text-[20px]">chevron_right</span></button>
                                             </div>
                                             <div className="grid grid-cols-7 gap-y-1">
-                                                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => <p key={d} className="text-[#617589] text-[12px] font-bold text-center h-8 flex items-center justify-center">{d}</p>)}
+                                                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <p key={i} className="text-[#617589] text-[12px] font-bold text-center h-8 flex items-center justify-center">{d}</p>)}
                                                 {renderCalendarGrid(secondViewDate.getFullYear(), secondViewDate.getMonth())}
                                             </div>
                                         </div>
@@ -595,91 +632,21 @@ const PreferencesPage: React.FC<PreferencesPageProps> = ({ onBack, onNext, onHom
                                     </div>
                                 </div>
 
-                                {/* Preferences (Optional) */}
-                                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-[#e5e7eb] dark:border-gray-700 flex flex-col gap-6 relative">
-                                    <div>
-                                        <div className="flex items-center gap-3 mb-4">
-                                            <input
-                                                type="checkbox"
-                                                checked={enableInterests}
-                                                onChange={(e) => setEnableInterests(e.target.checked)}
-                                                className="w-5 h-5 text-primary border-gray-300 rounded focus:ring-primary"
-                                            />
-                                            <h3 className={`text-lg font-bold leading-tight ${enableInterests ? 'text-[#111418] dark:text-white' : 'text-slate-400'}`}>{t('preferences.interests')}</h3>
-                                        </div>
-
-                                        <div className={`transition-all duration-300 ${enableInterests ? '' : 'opacity-40 pointer-events-none grayscale'}`}>
-                                            {/* Input Field */}
-                                            <div className="flex gap-2 mb-4">
-                                                <input
-                                                    type="text"
-                                                    value={prefInput}
-                                                    onChange={(e) => setPrefInput(e.target.value)}
-                                                    onKeyDown={handlePrefKeyDown}
-                                                    placeholder={t('preferences.add_interest_placeholder')}
-                                                    className="flex-1 rounded-lg border border-[#dbe0e5] dark:border-gray-600 bg-white dark:bg-gray-700 text-[#111418] dark:text-white focus:border-primary focus:ring-0 placeholder:text-gray-400 focus:outline-none px-4 py-2 text-sm"
-                                                />
-                                                <button
-                                                    onClick={addPreference}
-                                                    className="px-4 py-2 bg-primary text-white rounded-lg font-bold text-sm hover:bg-blue-600 transition-colors"
-                                                >
-                                                    {t('common.add')}
-                                                </button>
-                                            </div>
-
-                                            {/* Selected Preferences */}
-                                            {preferences.length > 0 && (
-                                                <div className="flex flex-wrap gap-2 mb-4">
-                                                    {preferences.map(pref => (
-                                                        <button
-                                                            key={pref}
-                                                            onClick={() => removePreference(pref)}
-                                                            className="px-3 py-1.5 rounded-lg text-sm font-medium border border-transparent bg-primary/10 text-primary hover:bg-primary/20 hover:text-red-500 transition-colors flex items-center gap-1 group"
-                                                        >
-                                                            {pref}
-                                                            <span className="material-symbols-outlined text-[16px] group-hover:text-red-500">close</span>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            )}
-
-                                            {/* Suggested Presets */}
-                                            <div>
-                                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{t('preferences.suggestions')}</p>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {PRESETS.filter(p => !preferences.includes(p)).map(p => (
-                                                        <button
-                                                            key={p}
-                                                            onClick={() => togglePreset(p)}
-                                                            className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-600 bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-1"
-                                                        >
-                                                            <span className="material-symbols-outlined text-[16px]">add</span>
-                                                            {p}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Detailed Budget (Optional) */}
                                 <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-[#e5e7eb] dark:border-gray-700 flex flex-col gap-6 relative">
                                     <div className="flex items-center gap-3 mb-2">
                                         <input
                                             type="checkbox"
-                                            checked={enableDetailedBudget}
-                                            onChange={(e) => setEnableDetailedBudget(e.target.checked)}
+                                            checked={enableAccommodation}
+                                            onChange={(e) => setEnableAccommodation(e.target.checked)}
                                             className="w-5 h-5 text-primary border-gray-300 rounded focus:ring-primary"
                                         />
-                                        <h3 className={`text-lg font-bold leading-tight ${enableDetailedBudget ? 'text-[#111418] dark:text-white' : 'text-slate-400'}`}>{t('preferences.spending')}</h3>
+                                        <h3 className={`text-lg font-bold leading-tight ${enableAccommodation ? 'text-[#111418] dark:text-white' : 'text-slate-400'}`}>{t('preferences.accommodation')}</h3>
                                     </div>
 
-                                    <div className={`flex flex-col gap-6 transition-all duration-300 ${enableDetailedBudget ? '' : 'opacity-40 pointer-events-none grayscale'}`}>
-                                        {/* Budget Slider */}
+                                    <div className={`flex flex-col gap-4 transition-all duration-300 ${enableAccommodation ? '' : 'opacity-40 pointer-events-none grayscale'}`}>
                                         <div>
                                             <div className="flex justify-between items-center mb-4">
-                                                <h3 className="text-[#111418] dark:text-white text-base font-bold leading-tight">{t('preferences.accommodation')}</h3>
+                                                <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t('preferences.budget')}</h3>
                                                 <span className="text-sm font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-full whitespace-nowrap">
                                                     ${budget[0]} - ${budget[1] >= 1000 ? '1000+' : budget[1]} <span className="text-xs font-medium opacity-70">{t('preferences.night')}</span>
                                                 </span>
@@ -696,10 +663,74 @@ const PreferencesPage: React.FC<PreferencesPageProps> = ({ onBack, onNext, onHom
 
                                         <div className="h-px w-full bg-gray-100 dark:bg-gray-700"></div>
 
-                                        {/* Dining Budget & Style */}
+                                        <div>
+                                            <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">{t('preferences.interests')}</h3>
+                                            <div className="flex gap-2 mb-4">
+                                                <input
+                                                    type="text"
+                                                    value={accommodationInput}
+                                                    onChange={(e) => setAccommodationInput(e.target.value)}
+                                                    onKeyDown={handleAccommodationKeyDown}
+                                                    placeholder={t('preferences.accommodation_placeholder')}
+                                                    className="flex-1 rounded-lg border border-[#dbe0e5] dark:border-gray-600 bg-white dark:bg-gray-700 text-[#111418] dark:text-white focus:border-primary focus:ring-0 placeholder:text-gray-400 focus:outline-none px-4 py-2 text-sm"
+                                                />
+                                                <button
+                                                    onClick={addAccommodationPref}
+                                                    className="px-4 py-2 bg-primary text-white rounded-lg font-bold text-sm hover:bg-blue-600 transition-colors"
+                                                >
+                                                    {t('common.add')}
+                                                </button>
+                                            </div>
+
+                                            {accommodationPrefs.length > 0 && (
+                                                <div className="flex flex-wrap gap-2 mb-4">
+                                                    {accommodationPrefs.map(pref => (
+                                                        <button
+                                                            key={pref}
+                                                            onClick={() => removeAccommodationPref(pref)}
+                                                            className="px-3 py-1.5 rounded-lg text-sm font-medium border border-transparent bg-primary/10 text-primary hover:bg-primary/20 hover:text-red-500 transition-colors flex items-center gap-1 group"
+                                                        >
+                                                            {pref}
+                                                            <span className="material-symbols-outlined text-[16px] group-hover:text-red-500">close</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            <div>
+                                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{t('preferences.suggestions')}</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {ACCOMMODATION_PRESETS.filter(p => !accommodationPrefs.includes(p)).map(p => (
+                                                        <button
+                                                            key={p}
+                                                            onClick={() => toggleAccommodationPreset(p)}
+                                                            className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-600 bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-1"
+                                                        >
+                                                            <span className="material-symbols-outlined text-[16px]">add</span>
+                                                            {p}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-[#e5e7eb] dark:border-gray-700 flex flex-col gap-6 relative">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <input
+                                            type="checkbox"
+                                            checked={enableDining}
+                                            onChange={(e) => setEnableDining(e.target.checked)}
+                                            className="w-5 h-5 text-primary border-gray-300 rounded focus:ring-primary"
+                                        />
+                                        <h3 className={`text-lg font-bold leading-tight ${enableDining ? 'text-[#111418] dark:text-white' : 'text-slate-400'}`}>{t('preferences.dining')}</h3>
+                                    </div>
+
+                                    <div className={`flex flex-col gap-6 transition-all duration-300 ${enableDining ? '' : 'opacity-40 pointer-events-none grayscale'}`}>
                                         <div>
                                             <div className="flex justify-between items-center mb-4">
-                                                <h3 className="text-[#111418] dark:text-white text-base font-bold leading-tight">{t('preferences.dining')}</h3>
+                                                <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t('preferences.budget')}</h3>
                                                 <span className="text-sm font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-full whitespace-nowrap">
                                                     ${diningBudget[0]} - ${diningBudget[1] >= 300 ? '300+' : diningBudget[1]} <span className="text-xs font-medium opacity-70">{t('preferences.person')}</span>
                                                 </span>
@@ -711,6 +742,59 @@ const PreferencesPage: React.FC<PreferencesPageProps> = ({ onBack, onNext, onHom
                                                 </div>
                                                 <div className="absolute size-6 bg-white dark:bg-slate-800 border-2 border-slate-400 dark:border-slate-500 rounded-full shadow-md cursor-grab active:cursor-grabbing flex items-center justify-center hover:scale-110 transition-transform z-10" style={{ left: `calc(${(diningBudget[0] / 300) * 100}% - 12px)` }} onMouseDown={(e) => startDrag(e, 'dining', 'min')}><div className="size-1.5 bg-slate-400 dark:bg-slate-500 rounded-full"></div></div>
                                                 <div className="absolute size-6 bg-white dark:bg-slate-800 border-2 border-slate-400 dark:border-slate-500 rounded-full shadow-md cursor-grab active:cursor-grabbing flex items-center justify-center hover:scale-110 transition-transform z-10" style={{ left: `calc(${(diningBudget[1] / 300) * 100}% - 12px)` }} onMouseDown={(e) => startDrag(e, 'dining', 'max')}><div className="size-1.5 bg-slate-400 dark:bg-slate-500 rounded-full"></div></div>
+                                            </div>
+                                        </div>
+
+                                        <div className="h-px w-full bg-gray-100 dark:bg-gray-700"></div>
+
+                                        <div>
+                                            <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">{t('preferences.interests')}</h3>
+                                            <div className="flex gap-2 mb-4">
+                                                <input
+                                                    type="text"
+                                                    value={diningInput}
+                                                    onChange={(e) => setDiningInput(e.target.value)}
+                                                    onKeyDown={handleDiningKeyDown}
+                                                    placeholder={t('preferences.dining_placeholder')}
+                                                    className="flex-1 rounded-lg border border-[#dbe0e5] dark:border-gray-600 bg-white dark:bg-gray-700 text-[#111418] dark:text-white focus:border-primary focus:ring-0 placeholder:text-gray-400 focus:outline-none px-4 py-2 text-sm"
+                                                />
+                                                <button
+                                                    onClick={addDiningPref}
+                                                    className="px-4 py-2 bg-primary text-white rounded-lg font-bold text-sm hover:bg-blue-600 transition-colors"
+                                                >
+                                                    {t('common.add')}
+                                                </button>
+                                            </div>
+
+                                            {diningPrefs.length > 0 && (
+                                                <div className="flex flex-wrap gap-2 mb-4">
+                                                    {diningPrefs.map(pref => (
+                                                        <button
+                                                            key={pref}
+                                                            onClick={() => removeDiningPref(pref)}
+                                                            className="px-3 py-1.5 rounded-lg text-sm font-medium border border-transparent bg-primary/10 text-primary hover:bg-primary/20 hover:text-red-500 transition-colors flex items-center gap-1 group"
+                                                        >
+                                                            {pref}
+                                                            <span className="material-symbols-outlined text-[16px] group-hover:text-red-500">close</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            <div>
+                                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{t('preferences.suggestions')}</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {DINING_PRESETS.filter(p => !diningPrefs.includes(p)).map(p => (
+                                                        <button
+                                                            key={p}
+                                                            onClick={() => toggleDiningPreset(p)}
+                                                            className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-600 bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-1"
+                                                        >
+                                                            <span className="material-symbols-outlined text-[16px]">add</span>
+                                                            {p}
+                                                        </button>
+                                                    ))}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>

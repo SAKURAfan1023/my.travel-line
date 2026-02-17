@@ -6,12 +6,20 @@ import os
 
 class TravelAgents:
     def __init__(self):
-        # Initialize DeepSeek LLM
+        api_key = os.getenv("DEEPSEEK_API_KEY")
+        base_url = os.getenv("DEEPSEEK_API_BASE")
+        model = os.getenv("LLM_MODEL") or "deepseek-chat"
+        
+        if not base_url and api_key:
+            base_url = "https://api.deepseek.com/v1"
+        if base_url and not base_url.endswith("/v1"):
+            base_url = f"{base_url}/v1"
+            
         self.llm = ChatOpenAI(
-            model="deepseek-chat", 
+            model=model,
             temperature=0.7,
-            api_key=os.getenv("DEEPSEEK_API_KEY"),
-            base_url="https://api.deepseek.com"
+            api_key=api_key,
+            base_url=base_url
         )
         # Initialize SerperDevTool
         self.serper_tool = SerperDevTool()

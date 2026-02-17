@@ -1,7 +1,7 @@
 import os
 import re
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -9,6 +9,27 @@ import requests
 
 # Load environment variables
 load_dotenv()
+
+deepseek_key = os.getenv("DEEPSEEK_API_KEY")
+deepseek_base = os.getenv("DEEPSEEK_API_BASE")
+
+if deepseek_key:
+    os.environ["OPENAI_API_KEY"] = deepseek_key
+
+if not deepseek_base and deepseek_key:
+    deepseek_base = "https://api.deepseek.com/v1"
+
+if deepseek_base and not deepseek_base.endswith("/v1"):
+    deepseek_base = f"{deepseek_base}/v1"
+
+if deepseek_base:
+    os.environ["OPENAI_API_BASE"] = deepseek_base
+    os.environ["OPENAI_BASE_URL"] = deepseek_base
+
+storage_dir = os.getenv("CREWAI_STORAGE_DIR", os.path.join("/tmp", "crewai_storage"))
+os.makedirs(storage_dir, exist_ok=True)
+os.environ["CREWAI_STORAGE_DIR"] = storage_dir
+os.environ.setdefault("CREWAI_STORAGE_PATH", storage_dir)
 
 app = FastAPI(title="TravelAI API")
 
@@ -237,6 +258,30 @@ def recommend_locations(city: str, tags: Optional[str] = None):
         print(f"Error fetching POIs: {e}")
         return {"locations": [], "tag_counts": {}}
 
+@app.get("/api/static-map")
+def static_map(center: str, zoom: int = 11, size: str = "1024*768", markers: Optional[str] = None):
+    api_key = os.getenv("AMAP_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="AMAP_KEY not configured")
+    params = {
+        "key": api_key,
+        "center": center,
+        "zoom": zoom,
+        "size": size
+    }
+    if markers:
+        params["markers"] = markers
+    try:
+        response = requests.get("https://restapi.amap.com/v3/staticmap", params=params)
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail="AMAP static map error")
+        content_type = response.headers.get("Content-Type", "image/png")
+        return Response(content=response.content, media_type=content_type)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 from crewai import Crew, Process
 from agents import TravelAgents
 from tasks import TravelTasks
@@ -245,11 +290,14 @@ import json
 class TripPreferences(BaseModel):
     city: str
     days: int
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
     selected_locations: List[TripLocation]
-    budget: List[int] # [min, max]
-    interests: List[str]
-    transport: str
-    dining_prefs: List[str]
+    budget: List[int]
+    interests: List[str] = []
+    transport: Optional[str] = None
+    dining_prefs: List[str] = []
+    accommodation_prefs: List[str] = []
 
 @app.post("/api/generate-itinerary")
 def generate_itinerary(prefs: TripPreferences):
@@ -271,10 +319,13 @@ def generate_itinerary(prefs: TripPreferences):
         inputs = {
             'city': prefs.city,
             'days': prefs.days,
+            'start_date': prefs.start_date or "",
+            'end_date': prefs.end_date or "",
             'budget': f"{prefs.budget[0]}-{prefs.budget[1]} CNY",
             'interests': ", ".join(prefs.interests),
-            'transport': prefs.transport,
+            'transport': prefs.transport or "",
             'dining_prefs': ", ".join(prefs.dining_prefs),
+            'accommodation_prefs': ", ".join(prefs.accommodation_prefs),
             'selected_locations': loc_str
         }
 

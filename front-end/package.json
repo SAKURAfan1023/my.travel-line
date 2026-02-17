@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@amap/amap-jsapi-loader": "^1.0.1",
     "@fontsource/noto-sans": "^5.2.10",
     "@fontsource/space-grotesk": "^5.2.10",
     "material-symbols": "^0.40.2",

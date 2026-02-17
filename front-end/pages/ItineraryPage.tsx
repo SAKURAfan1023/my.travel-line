@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import AMapLoader from '@amap/amap-jsapi-loader';
 import { useSettings } from '../contexts/SettingsContext';
 
 interface ItineraryPageProps {
@@ -14,10 +15,11 @@ const itineraryContent = {
     dayHeader: "Day 1",
     daySubHeader: "Traditional Kyoto",
     dateShort: "OCT 12",
+    mapCenter: { lng: 135.7681, lat: 35.0116 },
     mapPins: [
-      { id: 1, name: "Kinkaku-ji", top: "32%", left: "24%" },
-      { id: 2, name: "Fushimi Inari", top: "38%", left: "40%", active: true },
-      { id: 3, name: "Kiyomizu-dera", top: "45%", left: "55%" }
+      { id: 1, name: "Kinkaku-ji", top: "32%", left: "24%", lng: 135.729243, lat: 35.03937 },
+      { id: 2, name: "Fushimi Inari", top: "38%", left: "40%", lng: 135.7727, lat: 34.9671, active: true },
+      { id: 3, name: "Kiyomizu-dera", top: "45%", left: "55%", lng: 135.7846, lat: 34.9949 }
     ],
     mapOverlay: {
       stopNumber: "Stop #2",
@@ -65,10 +67,11 @@ const itineraryContent = {
     dayHeader: "第 1 天",
     daySubHeader: "传统京都",
     dateShort: "10月12日",
+    mapCenter: { lng: 135.7681, lat: 35.0116 },
     mapPins: [
-      { id: 1, name: "金阁寺", top: "32%", left: "24%" },
-      { id: 2, name: "伏见稻荷", top: "38%", left: "40%", active: true },
-      { id: 3, name: "清水寺", top: "45%", left: "55%" }
+      { id: 1, name: "金阁寺", top: "32%", left: "24%", lng: 135.729243, lat: 35.03937 },
+      { id: 2, name: "伏见稻荷", top: "38%", left: "40%", lng: 135.7727, lat: 34.9671, active: true },
+      { id: 3, name: "清水寺", top: "45%", left: "55%", lng: 135.7846, lat: 34.9949 }
     ],
     mapOverlay: {
       stopNumber: "第 2 站",
@@ -118,6 +121,14 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
   // State for itinerary content
   const [content, setContent] = useState<any>(itineraryContent[language]);
   const [loading, setLoading] = useState(true);
+  const [mapZoom, setMapZoom] = useState(11);
+  const [mapCenter, setMapCenter] = useState<{ lng: number; lat: number } | null>(null);
+  const [mapError, setMapError] = useState(false);
+  const [isMapLoaded, setIsMapLoaded] = useState(false);
+  const mapContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const mapRef = React.useRef<any>(null);
+  const AMapRef = React.useRef<any>(null); // Store AMap class reference
+  const markersRef = React.useRef<any[]>([]);
 
   React.useEffect(() => {
     // Check if we have generated data in localStorage
@@ -133,6 +144,125 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
     }
     setLoading(false);
   }, []);
+
+  React.useEffect(() => {
+    if (content?.mapCenter?.lng && content?.mapCenter?.lat) {
+      setMapCenter({ lng: content.mapCenter.lng, lat: content.mapCenter.lat });
+      return;
+    }
+    const firstPin = content?.mapPins?.find((pin: any) => pin?.lng && pin?.lat);
+    if (firstPin) {
+      setMapCenter({ lng: firstPin.lng, lat: firstPin.lat });
+    }
+  }, [content]);
+
+  const resolvedCenter = mapCenter || { lng: 116.397428, lat: 39.90923 };
+  const amapKey = ((import.meta as any).env?.VITE_AMAP_JS_KEY || (import.meta as any).env?.VITE_AMAP_KEY) as string | undefined;
+  const amapSecurityCode = (import.meta as any).env?.VITE_AMAP_SECURITY_CODE as string | undefined;
+
+  // Initialize Map
+  React.useEffect(() => {
+    if (!amapKey) {
+      setMapError(true);
+      return;
+    }
+
+    if (amapSecurityCode) {
+      (window as any)._AMapSecurityConfig = {
+        securityJsCode: amapSecurityCode,
+      };
+    }
+
+    AMapLoader.load({
+      key: amapKey,
+      version: "2.0",
+      plugins: ["AMap.Scale", "AMap.ToolBar"], // Removed ControlBar which can cause issues with some keys/versions
+    })
+      .then((AMap) => {
+        AMapRef.current = AMap;
+        setIsMapLoaded(true);
+      })
+      .catch((e) => {
+        console.error("AMap load failed", e);
+        setMapError(true);
+      });
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.destroy();
+        mapRef.current = null;
+      }
+    };
+  }, [amapKey]);
+
+  // Update Map View & Markers
+  React.useEffect(() => {
+    if (!isMapLoaded || !mapContainerRef.current || !AMapRef.current) return;
+
+    const AMap = AMapRef.current;
+
+    if (!mapRef.current) {
+      try {
+        mapRef.current = new AMap.Map(mapContainerRef.current, {
+          zoom: mapZoom,
+          center: [resolvedCenter.lng, resolvedCenter.lat],
+          viewMode: '2D', // Force 2D to avoid WebGL/Key issues
+        });
+        mapRef.current.addControl(new AMap.Scale());
+        mapRef.current.addControl(new AMap.ToolBar({ position: 'LT' }));
+        // Removed ControlBar
+      } catch (e) {
+        console.error("Map init failed", e);
+        setMapError(true);
+        return;
+      }
+    } else {
+      mapRef.current.setZoom(mapZoom);
+      mapRef.current.setCenter([resolvedCenter.lng, resolvedCenter.lat]);
+    }
+
+    // Clear old markers
+    markersRef.current.forEach((marker) => marker.setMap(null));
+    markersRef.current = [];
+
+    // Add new markers
+    (content?.mapPins || []).forEach((pin: any) => {
+      if (!pin?.lng || !pin?.lat) return;
+      const markerContent = `
+        <div class="relative group cursor-pointer transform transition-transform hover:scale-110">
+          <div class="w-10 h-10 bg-primary text-white rounded-full flex items-center justify-center font-bold shadow-lg ring-4 ring-white/50 dark:ring-black/20 text-sm">
+            ${pin.id}
+          </div>
+          <div class="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-white dark:bg-surface-dark px-3 py-1 rounded-full text-xs font-bold shadow-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity text-slate-800 dark:text-white pointer-events-none z-50">
+            ${pin.name}
+          </div>
+        </div>
+      `;
+
+      const marker = new AMap.Marker({
+        position: [pin.lng, pin.lat],
+        content: markerContent,
+        offset: new AMap.Pixel(-20, -20), // Center the custom marker (40x40 / 2)
+        zIndex: pin.active ? 100 : 50,
+      });
+
+      marker.setMap(mapRef.current);
+      markersRef.current.push(marker);
+    });
+  }, [isMapLoaded, content, mapZoom, resolvedCenter.lng, resolvedCenter.lat]);
+
+  const handleZoomIn = () => setMapZoom((z) => Math.min(18, z + 1));
+  const handleZoomOut = () => setMapZoom((z) => Math.max(3, z - 1));
+  const handleLocate = () => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setMapCenter({ lng: pos.coords.longitude, lat: pos.coords.latitude });
+        setMapZoom((z) => Math.max(z, 12));
+      },
+      () => null
+    );
+  };
 
   // Helper to get tag styles
   const getTagStyles = (color: string) => {
@@ -191,53 +321,29 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
       <main className="flex flex-1 overflow-hidden relative">
         {/* Left Pane: Map */}
         <div className="relative w-full lg:w-2/3 h-full bg-slate-200 dark:bg-slate-900 group/map">
-          {/* Map BG */}
-          <div className="absolute inset-0 w-full h-full bg-cover bg-center transition-all duration-700" style={{ backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuABk1kntWQuUoSv7HCayE55jch7f8bJTmMPewp9llbZ2phY2dAu4NZLou3m2MsoLbx1USyAfqKr3SFjEVwumj0djJYXtap6Jod6OWPX3kypdnQ9BnTCIu6sSNUXMQ2i-C9GaiGkd6p-4SF6U3Yb2jYonC1Sa63TrXCsqgkhYYy7WkBQnGx9MZx2wo7kZUHrczAKFvu4rlDvMo0LQ2rBE5lsp8vjIl7TMpZWev6Sho7FegjYynVNbr3H2jXrx2p8lgZ1t4vzzg")', filter: 'brightness(0.95)' }}></div>
+          <div ref={mapContainerRef} className="absolute inset-0 w-full h-full"></div>
+          {!amapKey || mapError ? (
+            <div
+              className="absolute inset-0 w-full h-full bg-cover bg-center transition-all duration-700 flex items-center justify-center"
+              style={{ backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuABk1kntWQuUoSv7HCayE55jch7f8bJTmMPewp9llbZ2phY2dAu4NZLou3m2MsoLbx1USyAfqKr3SFjEVwumj0djJYXtap6Jod6OWPX3kypdnQ9BnTCIu6sSNUXMQ2i-C9GaiGkd6p-4SF6U3Yb2jYonC1Sa63TrXCsqgkhYYy7WkBQnGx9MZx2wo7kZUHrczAKFvu4rlDvMo0LQ2rBE5lsp8vjIl7TMpZWev6Sho7FegjYynVNbr3H2jXrx2p8lgZ1t4vzzg")', filter: 'brightness(0.95)' }}
+            >
+              <div className="px-4 py-2 rounded-lg bg-white/90 dark:bg-surface-dark/90 text-slate-700 dark:text-slate-200 text-sm font-medium">
+                地图加载失败，请检查高德 JS Key/安全密钥/域名白名单
+              </div>
+            </div>
+          ) : null}
 
           {/* Overlay Gradient */}
           <div className="absolute inset-0 bg-gradient-to-t from-slate-900/10 to-transparent pointer-events-none"></div>
 
-          {/* SVG Lines */}
-          <svg className="absolute inset-0 w-full h-full pointer-events-none z-10 drop-shadow-md">
-            <path d="M 350 250 Q 450 350 550 300 T 750 350" fill="none" stroke="#2b8cee" strokeDasharray="8 6" strokeLinecap="round" strokeWidth="4"></path>
-          </svg>
-
-          {/* Map Controls */}
-          <div className="absolute top-4 left-4 right-4 lg:left-6 lg:right-auto z-20 flex flex-col gap-3 max-w-sm pointer-events-none">
-            <div className="pointer-events-auto bg-white dark:bg-surface-dark shadow-lg rounded-xl p-1 flex">
-              <button className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium shadow-sm transition-all">Map View</button>
-              <button className="flex-1 px-4 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg text-sm font-medium transition-all">Satellite</button>
-            </div>
-          </div>
-
           {/* Zoom */}
           <div className="absolute bottom-6 right-6 z-20 flex flex-col gap-2">
             <div className="flex flex-col bg-white dark:bg-surface-dark rounded-xl shadow-lg overflow-hidden border border-slate-200 dark:border-slate-700">
-              <button className="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-white border-b border-slate-200 dark:border-slate-700 transition-colors"><span className="material-symbols-outlined">add</span></button>
-              <button className="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-white transition-colors"><span className="material-symbols-outlined">remove</span></button>
+              <button onClick={handleZoomIn} className="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-white border-b border-slate-200 dark:border-slate-700 transition-colors"><span className="material-symbols-outlined">add</span></button>
+              <button onClick={handleZoomOut} className="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-white transition-colors"><span className="material-symbols-outlined">remove</span></button>
             </div>
-            <button className="p-2 bg-white dark:bg-surface-dark rounded-xl shadow-lg text-primary hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"><span className="material-symbols-outlined">my_location</span></button>
+            <button onClick={handleLocate} className="p-2 bg-white dark:bg-surface-dark rounded-xl shadow-lg text-primary hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"><span className="material-symbols-outlined">my_location</span></button>
           </div>
-
-          {/* Dynamic Map Pins */}
-          {content.mapPins.map((pin) => (
-            <div
-              key={pin.id}
-              className={`absolute z-20 transform -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-transform hover:scale-110 group ${pin.active ? 'z-30' : ''}`}
-              style={{ top: pin.top, left: pin.left }}
-            >
-              <div className="relative">
-                {pin.active ? (
-                  <div className="size-12 bg-white dark:bg-surface-dark text-primary border-4 border-primary rounded-full flex items-center justify-center font-bold shadow-xl">{pin.id}</div>
-                ) : (
-                  <>
-                    <div className="size-10 bg-primary text-white rounded-full flex items-center justify-center font-bold shadow-lg ring-4 ring-white/50 dark:ring-black/20">{pin.id}</div>
-                    <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-white dark:bg-surface-dark px-3 py-1 rounded-full text-xs font-bold shadow-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity text-slate-800 dark:text-white">{pin.name}</div>
-                  </>
-                )}
-              </div>
-            </div>
-          ))}
 
           {/* Detail Overlay */}
           <div className="absolute z-40" style={{ top: '22%', left: '43%' }}>
