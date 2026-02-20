@@ -56,6 +56,9 @@ class TravelTasks:
                     - 在 timeline 中显式添加交通事件（"type": "travel"），位于两个活动之间。
                     - 交通事件的 `description` 应包含具体的路线信息（如“地铁2号线 -> 5路公交”）。
                     - 确保行程安排的时间流包含交通耗时。
+                13. **总花费计算**:
+                    - 必须计算整个行程的 `totalEstimatedCost`，它是所有活动费用与交通费用的总和。
+                    - 确保此数值包含在返回的 JSON 根对象中。
 
                 **输出格式:**
                 必须返回严格有效的 JSON 对象（不能包含 Markdown 或代码块），结构如下:
@@ -63,6 +66,7 @@ class TravelTasks:
                     "tripTitle": "3 Days in {city}",
                     "dateDisplay": "Oct 12 - Oct 14",
                     "budgetRange": { "min": 1000, "max": 3000, "currency": "¥" },
+                    "totalEstimatedCost": 1250,
                     "days": [
                         {
                             "dayHeader": "Day 1",

@@ -17,6 +17,7 @@ const itineraryContent = {
     dateShort: "OCT 12",
     mapCenter: { lng: 135.7681, lat: 35.0116 },
     budgetRange: { min: 60000, max: 70000, currency: "¥" },
+    totalEstimatedCost: 65000,
     mapPins: [
       {
         id: 1,
@@ -102,6 +103,7 @@ const itineraryContent = {
     dateShort: "10月12日",
     mapCenter: { lng: 135.7681, lat: 35.0116 },
     budgetRange: { min: 60000, max: 70000, currency: "¥" },
+    totalEstimatedCost: 65000,
     mapPins: [
       {
         id: 1,
@@ -809,15 +811,19 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
                   <span>2 {t('common.guests')}</span>
                 </div>
               </div>
-              <button className="flex items-center justify-center size-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+              {/* <button className="flex items-center justify-center size-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
                 <span className="material-symbols-outlined">edit</span>
-              </button>
+              </button> */}
             </div>
             <div className="flex items-center justify-between bg-primary/5 dark:bg-primary/10 rounded-xl p-4 border border-primary/10">
               <div className="flex flex-col">
                 <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">{t('itinerary.est_cost')}</span>
                 <span className="text-xl font-bold text-primary">
                   {(() => {
+                    if (content?.totalEstimatedCost) {
+                      const currency = content?.budgetRange?.currency || '¥';
+                      return `${currency}${Number(content.totalEstimatedCost).toLocaleString()}`;
+                    }
                     const budgetRange =
                       content?.budgetRange ||
                       (Array.isArray(content?.budget) ? { min: content.budget[0], max: content.budget[1], currency: '¥' } : null);
@@ -864,7 +870,7 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
 
                 <div className="flex flex-col gap-10">
                   {days.map((day: any, dayIndex: number) => (
-                    <div key={dayIndex} className="flex flex-col gap-6">
+                    <div key={dayIndex} className="flex flex-col">
                       <div
                         ref={(el) => {
                           daySectionRefs.current[dayIndex] = el;
