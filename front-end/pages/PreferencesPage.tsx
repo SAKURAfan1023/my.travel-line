@@ -98,6 +98,7 @@ const PreferencesPage: React.FC<PreferencesPageProps> = ({ onBack, onNext, onHom
 
     // Modal State for Location Details
     const [editingLocId, setEditingLocId] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
 
     // Slider Logic Refs
     const activeSlider = useRef<'total' | 'budget' | 'dining' | null>(null);
@@ -380,6 +381,7 @@ const PreferencesPage: React.FC<PreferencesPageProps> = ({ onBack, onNext, onHom
             payload.dining_prefs = diningPrefs;
         }
 
+        setLoading(true);
         try {
             // Show loading state here ideally
             console.log("Generating with payload:", payload);
@@ -401,6 +403,8 @@ const PreferencesPage: React.FC<PreferencesPageProps> = ({ onBack, onNext, onHom
         } catch (e) {
             console.error(e);
             alert("Error connecting to server.");
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -812,9 +816,22 @@ const PreferencesPage: React.FC<PreferencesPageProps> = ({ onBack, onNext, onHom
                         <span className="material-symbols-outlined">arrow_back</span>
                         {t('preferences.back')}
                     </button>
-                    <button onClick={handleGenerate} className="flex items-center gap-2 px-8 py-3 rounded-xl bg-primary hover:bg-blue-600 text-white font-bold shadow-lg shadow-blue-500/30 transition-all transform hover:scale-[1.02]">
-                        <span className="material-symbols-outlined">auto_awesome</span>
-                        {t('preferences.generate')}
+                    <button
+                        onClick={handleGenerate}
+                        disabled={loading}
+                        className={`flex items-center gap-2 px-8 py-3 rounded-xl bg-primary text-white font-bold shadow-lg shadow-blue-500/30 transition-all transform ${loading ? 'opacity-70 cursor-not-allowed' : 'hover:bg-blue-600 hover:scale-[1.02]'}`}
+                    >
+                        {loading ? (
+                            <>
+                                <span className="material-symbols-outlined animate-spin">progress_activity</span>
+                                {language === 'zh' ? '正在生成中...' : 'Generating...'}
+                            </>
+                        ) : (
+                            <>
+                                <span className="material-symbols-outlined">auto_awesome</span>
+                                {t('preferences.generate')}
+                            </>
+                        )}
                     </button>
                 </div>
             </div>

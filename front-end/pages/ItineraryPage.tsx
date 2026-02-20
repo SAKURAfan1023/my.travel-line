@@ -16,18 +16,49 @@ const itineraryContent = {
     daySubHeader: "Traditional Kyoto",
     dateShort: "OCT 12",
     mapCenter: { lng: 135.7681, lat: 35.0116 },
+    budgetRange: { min: 60000, max: 70000, currency: "¥" },
     mapPins: [
-      { id: 1, name: "Kinkaku-ji", top: "32%", left: "24%", lng: 135.729243, lat: 35.03937 },
-      { id: 2, name: "Fushimi Inari", top: "38%", left: "40%", lng: 135.7727, lat: 34.9671, active: true },
-      { id: 3, name: "Kiyomizu-dera", top: "45%", left: "55%", lng: 135.7846, lat: 34.9949 }
+      {
+        id: 1,
+        name: "Kinkaku-ji",
+        top: "32%",
+        left: "24%",
+        lng: 135.729243,
+        lat: 35.03937,
+        title: "Kinkaku-ji (Golden Pavilion)",
+        duration: "1.5h Stay",
+        description: "Iconic Zen Buddhist temple covered in gold leaf.",
+        aiStrategy: "Best viewed in the morning light reflecting on the pond. Arrive early.",
+        stopNumber: "Stop #1"
+      },
+      {
+        id: 2,
+        name: "Fushimi Inari",
+        top: "38%",
+        left: "40%",
+        lng: 135.7727,
+        lat: 34.9671,
+        active: true,
+        title: "Fushimi Inari Shrine",
+        duration: "2h Stay",
+        description: "Famous for its thousands of vermilion torii gates.",
+        aiStrategy: "Arrive before 8 AM to avoid the main crowds. The hike to the summit takes about 2-3 hours round trip.",
+        stopNumber: "Stop #2"
+      },
+      {
+        id: 3,
+        name: "Kiyomizu-dera",
+        top: "45%",
+        left: "55%",
+        lng: 135.7846,
+        lat: 34.9949,
+        title: "Kiyomizu-dera",
+        duration: "2h Stay",
+        description: "Historic temple with a massive wooden stage.",
+        aiStrategy: "Sunset views are spectacular. Be prepared for crowds.",
+        stopNumber: "Stop #3"
+      }
     ],
-    mapOverlay: {
-      stopNumber: "Stop #2",
-      title: "Fushimi Inari Shrine",
-      duration: "2h Stay",
-      description: "Famous for its thousands of vermilion torii gates.",
-      aiStrategy: "Arrive before 8 AM to avoid the main crowds. The hike to the summit takes about 2-3 hours round trip."
-    },
     timeline: [
       {
         time: "08:00 AM",
@@ -68,18 +99,49 @@ const itineraryContent = {
     daySubHeader: "传统京都",
     dateShort: "10月12日",
     mapCenter: { lng: 135.7681, lat: 35.0116 },
+    budgetRange: { min: 60000, max: 70000, currency: "¥" },
     mapPins: [
-      { id: 1, name: "金阁寺", top: "32%", left: "24%", lng: 135.729243, lat: 35.03937 },
-      { id: 2, name: "伏见稻荷", top: "38%", left: "40%", lng: 135.7727, lat: 34.9671, active: true },
-      { id: 3, name: "清水寺", top: "45%", left: "55%", lng: 135.7846, lat: 34.9949 }
+      {
+        id: 1,
+        name: "金阁寺",
+        top: "32%",
+        left: "24%",
+        lng: 135.729243,
+        lat: 35.03937,
+        title: "金阁寺",
+        duration: "停留 1.5小时",
+        description: "标志性的禅宗寺庙，覆盖着金箔。",
+        aiStrategy: "建议在晨光映照的池塘边观赏最佳。请尽早到达。",
+        stopNumber: "第 1 站"
+      },
+      {
+        id: 2,
+        name: "伏见稻荷",
+        top: "38%",
+        left: "40%",
+        lng: 135.7727,
+        lat: 34.9671,
+        active: true,
+        title: "伏见稻荷大社",
+        duration: "停留 2小时",
+        description: "以成千上万的朱红色鸟居闻名的神社。",
+        aiStrategy: "建议早上 8 点前到达以避开拥挤人群。徒步至山顶往返约需 2-3 小时。",
+        stopNumber: "第 2 站"
+      },
+      {
+        id: 3,
+        name: "清水寺",
+        top: "45%",
+        left: "55%",
+        lng: 135.7846,
+        lat: 34.9949,
+        title: "清水寺",
+        duration: "停留 2小时",
+        description: "历史悠久的寺庙，拥有巨大的木制舞台。",
+        aiStrategy: "日落景色壮观。请做好应对拥挤人群的准备。",
+        stopNumber: "第 3 站"
+      }
     ],
-    mapOverlay: {
-      stopNumber: "第 2 站",
-      title: "伏见稻荷大社",
-      duration: "停留 2小时",
-      description: "以成千上万的朱红色鸟居闻名的神社。",
-      aiStrategy: "建议早上 8 点前到达以避开拥挤人群。徒步至山顶往返约需 2-3 小时。"
-    },
     timeline: [
       {
         time: "08:00 AM",
@@ -121,6 +183,7 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
   // State for itinerary content
   const [content, setContent] = useState<any>(itineraryContent[language]);
   const [loading, setLoading] = useState(true);
+  const [selectedPinKey, setSelectedPinKey] = useState<string | null>(null);
   const [mapZoom, setMapZoom] = useState(11);
   const [mapCenter, setMapCenter] = useState<{ lng: number; lat: number } | null>(null);
   const [mapError, setMapError] = useState(false);
@@ -129,6 +192,8 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
   const mapRef = React.useRef<any>(null);
   const AMapRef = React.useRef<any>(null); // Store AMap class reference
   const markersRef = React.useRef<any[]>([]);
+  const ignoreNextMapClickRef = React.useRef(false);
+  const mapClickHandlerRef = React.useRef<(() => void) | null>(null);
 
   React.useEffect(() => {
     // Check if we have generated data in localStorage
@@ -145,16 +210,111 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
     setLoading(false);
   }, []);
 
+  const days = React.useMemo(() => {
+    if (Array.isArray(content?.days) && content.days.length > 0) return content.days;
+    return [content];
+  }, [content]);
+
+  const [activeDayIndex, setActiveDayIndex] = useState(0);
+
+  const activeDay = React.useMemo(() => {
+    const safeIndex = Math.min(activeDayIndex, Math.max(0, days.length - 1));
+    return days[safeIndex] ?? days[0];
+  }, [days, activeDayIndex]);
+
+  React.useEffect(() => {
+    if (activeDayIndex > days.length - 1) {
+      setActiveDayIndex(0);
+    }
+  }, [activeDayIndex, days.length]);
+
+  React.useEffect(() => {
+    setSelectedPinKey(null);
+  }, [activeDayIndex]);
+
+  const orderedPins = React.useMemo(() => {
+    let seq = 1;
+    const pins: Array<any> = [];
+
+    days.forEach((day: any, dayIndex: number) => {
+      (day?.mapPins || []).forEach((pin: any, pinIndex: number) => {
+        const key = `${dayIndex}:${pin?.id ?? pinIndex}`;
+        const providedSeq = Number(pin?.seq);
+        const displaySeq = Number.isFinite(providedSeq) && providedSeq > 0 ? providedSeq : seq;
+        if (!(Number.isFinite(providedSeq) && providedSeq > 0)) seq += 1;
+
+        pins.push({
+          ...pin,
+          __key: key,
+          __dayIndex: dayIndex,
+          __seq: displaySeq,
+        });
+      });
+    });
+
+    const hasAnyProvidedSeq = pins.some((p) => Number.isFinite(Number(p?.seq)) && Number(p?.seq) > 0);
+    if (hasAnyProvidedSeq) {
+      return pins.sort((a, b) => Number(a.__seq) - Number(b.__seq));
+    }
+    return pins;
+  }, [days]);
+
+  const timelineScrollRef = React.useRef<HTMLDivElement | null>(null);
+  const daySectionRefs = React.useRef<Array<HTMLDivElement | null>>([]);
+  const timelineScrollRafRef = React.useRef<number | null>(null);
+
+  const scrollToDay = React.useCallback((dayIndex: number) => {
+    const container = timelineScrollRef.current;
+    const target = daySectionRefs.current[dayIndex];
+    if (container && target) {
+      container.scrollTo({ top: target.offsetTop - 8, behavior: 'smooth' });
+    }
+    setActiveDayIndex(dayIndex);
+  }, []);
+
+  const handleTimelineScroll = React.useCallback(() => {
+    if (timelineScrollRafRef.current != null) return;
+    timelineScrollRafRef.current = window.requestAnimationFrame(() => {
+      timelineScrollRafRef.current = null;
+      const container = timelineScrollRef.current;
+      if (!container) return;
+
+      const containerTop = container.getBoundingClientRect().top;
+      let bestIndex = 0;
+      let bestDistance = Number.POSITIVE_INFINITY;
+
+      daySectionRefs.current.forEach((el, idx) => {
+        if (!el) return;
+        const distance = Math.abs(el.getBoundingClientRect().top - containerTop);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestIndex = idx;
+        }
+      });
+
+      setActiveDayIndex((prev) => (prev === bestIndex ? prev : bestIndex));
+    });
+  }, []);
+
+  React.useEffect(() => {
+    return () => {
+      if (timelineScrollRafRef.current != null) {
+        window.cancelAnimationFrame(timelineScrollRafRef.current);
+        timelineScrollRafRef.current = null;
+      }
+    };
+  }, []);
+
   React.useEffect(() => {
     if (content?.mapCenter?.lng && content?.mapCenter?.lat) {
       setMapCenter({ lng: content.mapCenter.lng, lat: content.mapCenter.lat });
       return;
     }
-    const firstPin = content?.mapPins?.find((pin: any) => pin?.lng && pin?.lat);
+    const firstPin = activeDay?.mapPins?.find((pin: any) => pin?.lng && pin?.lat);
     if (firstPin) {
       setMapCenter({ lng: firstPin.lng, lat: firstPin.lat });
     }
-  }, [content]);
+  }, [content, activeDay]);
 
   const resolvedCenter = mapCenter || { lng: 116.397428, lat: 39.90923 };
   const amapKey = ((import.meta as any).env?.VITE_AMAP_JS_KEY || (import.meta as any).env?.VITE_AMAP_KEY) as string | undefined;
@@ -189,6 +349,10 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
 
     return () => {
       if (mapRef.current) {
+        if (mapClickHandlerRef.current) {
+          mapRef.current.off('click', mapClickHandlerRef.current);
+          mapClickHandlerRef.current = null;
+        }
         mapRef.current.destroy();
         mapRef.current = null;
       }
@@ -210,7 +374,15 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
         });
         mapRef.current.addControl(new AMap.Scale());
         mapRef.current.addControl(new AMap.ToolBar({ position: 'LT' }));
-        // Removed ControlBar
+        const handleMapClick = () => {
+          if (ignoreNextMapClickRef.current) {
+            ignoreNextMapClickRef.current = false;
+            return;
+          }
+          setSelectedPinKey(null);
+        };
+        mapClickHandlerRef.current = handleMapClick;
+        mapRef.current.on('click', handleMapClick);
       } catch (e) {
         console.error("Map init failed", e);
         setMapError(true);
@@ -226,12 +398,13 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
     markersRef.current = [];
 
     // Add new markers
-    (content?.mapPins || []).forEach((pin: any) => {
+    orderedPins.forEach((pin: any) => {
       if (!pin?.lng || !pin?.lat) return;
+      const displayNumber = pin?.__seq ?? pin?.seq ?? pin?.id;
       const markerContent = `
         <div class="relative group cursor-pointer transform transition-transform hover:scale-110">
           <div class="w-10 h-10 bg-primary text-white rounded-full flex items-center justify-center font-bold shadow-lg ring-4 ring-white/50 dark:ring-black/20 text-sm">
-            ${pin.id}
+            ${displayNumber}
           </div>
           <div class="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-white dark:bg-surface-dark px-3 py-1 rounded-full text-xs font-bold shadow-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity text-slate-800 dark:text-white pointer-events-none z-50">
             ${pin.name}
@@ -243,13 +416,18 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
         position: [pin.lng, pin.lat],
         content: markerContent,
         offset: new AMap.Pixel(-20, -20), // Center the custom marker (40x40 / 2)
-        zIndex: pin.active ? 100 : 50,
+        zIndex: pin.__dayIndex === activeDayIndex ? 100 : 50,
+      });
+
+      marker.on('click', () => {
+        ignoreNextMapClickRef.current = true;
+        setSelectedPinKey(pin.__key);
       });
 
       marker.setMap(mapRef.current);
       markersRef.current.push(marker);
     });
-  }, [isMapLoaded, content, mapZoom, resolvedCenter.lng, resolvedCenter.lat]);
+  }, [isMapLoaded, orderedPins, activeDayIndex, mapZoom, resolvedCenter.lng, resolvedCenter.lat]);
 
   const handleZoomIn = () => setMapZoom((z) => Math.min(18, z + 1));
   const handleZoomOut = () => setMapZoom((z) => Math.max(3, z - 1));
@@ -336,43 +514,58 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
           {/* Overlay Gradient */}
           <div className="absolute inset-0 bg-gradient-to-t from-slate-900/10 to-transparent pointer-events-none"></div>
 
-          {/* Zoom */}
+          {/* Zoom
           <div className="absolute bottom-6 right-6 z-20 flex flex-col gap-2">
             <div className="flex flex-col bg-white dark:bg-surface-dark rounded-xl shadow-lg overflow-hidden border border-slate-200 dark:border-slate-700">
               <button onClick={handleZoomIn} className="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-white border-b border-slate-200 dark:border-slate-700 transition-colors"><span className="material-symbols-outlined">add</span></button>
               <button onClick={handleZoomOut} className="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-white transition-colors"><span className="material-symbols-outlined">remove</span></button>
             </div>
             <button onClick={handleLocate} className="p-2 bg-white dark:bg-surface-dark rounded-xl shadow-lg text-primary hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"><span className="material-symbols-outlined">my_location</span></button>
-          </div>
+          </div> */}
 
           {/* Detail Overlay */}
-          <div className="absolute z-40" style={{ top: '22%', left: '43%' }}>
-            <div className="w-72 bg-white dark:bg-surface-dark rounded-2xl shadow-2xl overflow-hidden animate-fade-in-up ring-1 ring-slate-900/5 dark:ring-white/10">
-              <div className="h-24 bg-cover bg-center relative" style={{ backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuCxphmBCFqD26UPGKl5qZs92FhWAFxCqetX3ec89rKFbl6VzKKaY58_8B9MoRVaZQtrfQv_rw0XZm4DsV0ateZSCZiWy1z-FpyxlessKJC2XU0liP4iWhfUR5hE8bwsuTMxKfSFTtsok0p1Whyd2vQm6NxMYhGM-Z6ul8bHm2B_Dw23OvT5mYbxtU0XfwgUHx6KSmVQKhAk4_3WnpiVq-Z_otsfqQuGOGZIUmGVVKsaEDA3VzXsZYoNNPRSzQ3grTk8l1Yd0Q")' }}>
-                <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-lg">{content.mapOverlay.stopNumber}</div>
-              </div>
-              <div className="p-4">
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="font-bold text-lg leading-tight text-slate-900 dark:text-white">{content.mapOverlay.title}</h3>
-                  <span className="text-xs font-medium text-slate-500 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded">{content.mapOverlay.duration}</span>
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">{content.mapOverlay.description}</p>
-                <div className="bg-primary/10 dark:bg-primary/20 rounded-lg p-3 mb-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="material-symbols-outlined text-primary text-sm">psychology</span>
-                    <span className="text-xs font-bold text-primary uppercase">{t('itinerary.ai_rec')}</span>
+          {(() => {
+            const selectedPin = orderedPins.find((p: any) => p.__key === selectedPinKey);
+            if (!selectedPin) return null;
+
+            return (
+              <div className="absolute z-40" style={{ top: '22%', left: '43%' }}>
+                <div className="w-72 bg-white dark:bg-surfaw ring-1 ring-slate-900/5 dark:ring-white/10 shadow-xl rounded-xl overflow-hidden">
+                  <div className="h-24 bg-cover bg-center relative" style={{ backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuCxphmBCFqD26UPGKl5qZs92FhWAFxCqetX3ec89rKFbl6VzKKaY58_8B9MoRVaZQtrfQv_rw0XZm4DsV0ateZSCZiWy1z-FpyxlessKJC2XU0liP4iWhfUR5hE8bwsuTMxKfSFTtsok0p1Whyd2vQm6NxMYhGM-Z6ul8bHm2B_Dw23OvT5mYbxtU0XfwgUHx6KSmVQKhAk4_3WnpiVq-Z_otsfqQuGOGZIUmGVVKsaEDA3VzXsZYoNNPRSzQ3grTk8l1Yd0Q")' }}>
+                    <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-lg">{selectedPin.stopNumber || `Stop #${selectedPin.__seq ?? selectedPin.id}`}</div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setSelectedPinKey(null); }}
+                      className="absolute top-2 left-2 bg-black/50 backdrop-blur-sm text-white rounded-full p-1 hover:bg-black/70"
+                    >
+                      <span className="material-symbols-outlined text-sm">close</span>
+                    </button>
                   </div>
-                  <p className="text-xs text-slate-700 dark:text-slate-200 leading-relaxed">{content.mapOverlay.aiStrategy}</p>
-                </div>
-                <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-700 pt-3">
-                  <span className="text-sm font-semibold text-slate-900 dark:text-white">{t('itinerary.free_entry')}</span>
-                  <button className="text-xs font-medium text-primary hover:text-blue-600 flex items-center">
-                    {t('itinerary.more_details')} <span className="material-symbols-outlined text-sm ml-1">arrow_forward</span>
-                  </button>
+                  <div className="p-4 bg-white dark:bg-surface-dark">
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="font-bold text-lg leading-tight text-slate-900 dark:text-white">{selectedPin.title || selectedPin.name}</h3>
+                      {selectedPin.duration && <span className="text-xs font-medium text-slate-500 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded whitespace-nowrap ml-2">{selectedPin.duration}</span>}
+                    </div>
+                    {selectedPin.description && <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 line-clamp-2">{selectedPin.description}</p>}
+                    {selectedPin.aiStrategy && (
+                      <div className="bg-primary/10 dark:bg-primary/20 rounded-lg p-3 mb-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="material-symbols-outlined text-primary text-sm">psychology</span>
+                          <span className="text-xs font-bold text-primary uppercase">{t('itinerary.ai_rec')}</span>
+                        </div>
+                        <p className="text-xs text-slate-700 dark:text-slate-200 leading-relaxed line-clamp-3">{selectedPin.aiStrategy}</p>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-700 pt-3">
+                      <span className="text-sm font-semibold text-slate-900 dark:text-white">{t('itinerary.free_entry')}</span>
+                      <button className="text-xs font-medium text-primary hover:text-blue-600 flex items-center">
+                        {t('itinerary.more_details')} <span className="material-symbols-outlined text-sm ml-1">arrow_forward</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
+            );
+          })()}
         </div>
 
         {/* Right Pane: Timeline */}
@@ -395,7 +588,16 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
             <div className="flex items-center justify-between bg-primary/5 dark:bg-primary/10 rounded-xl p-4 border border-primary/10">
               <div className="flex flex-col">
                 <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">{t('itinerary.est_cost')}</span>
-                <span className="text-xl font-bold text-primary">¥65,000</span>
+                <span className="text-xl font-bold text-primary">
+                  {(() => {
+                    const budgetRange =
+                      content?.budgetRange ||
+                      (Array.isArray(content?.budget) ? { min: content.budget[0], max: content.budget[1], currency: '¥' } : null);
+                    if (!budgetRange) return '—';
+                    const currency = budgetRange.currency || '¥';
+                    return `${currency}${Number(budgetRange.min).toLocaleString()} - ${Number(budgetRange.max).toLocaleString()}`;
+                  })()}
+                </span>
               </div>
               <div className="h-8 w-px bg-slate-200 dark:bg-slate-700"></div>
               <div className="flex flex-col items-end">
@@ -408,46 +610,92 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-6 py-4 scroll-smooth bg-slate-50/50 dark:bg-transparent">
-            {/* Day 1 */}
+          <div
+            ref={timelineScrollRef}
+            onScroll={handleTimelineScroll}
+            className="flex-1 overflow-y-auto px-6 py-4 scroll-smooth bg-slate-50/50 dark:bg-transparent"
+          >
             <div className="flex flex-col gap-6">
-              {/* Day Header */}
-              <div className="flex items-center gap-4 sticky top-0 bg-white/95 dark:bg-background-dark/95 backdrop-blur py-3 mb-2 z-10 border-b border-slate-100 dark:border-slate-800">
-                <div className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-3 py-1 rounded-lg text-sm font-bold">{content.dayHeader}</div>
-                <div className="flex-1">
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white">{content.daySubHeader}</h2>
-                </div>
-                <span className="text-xs font-bold text-slate-400 uppercase">{content.dateShort}</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                {days.map((day: any, idx: number) => (
+                  <button
+                    key={idx}
+                    onClick={() => scrollToDay(idx)}
+                    className={`px-3 py-1 rounded-lg text-sm font-bold transition-colors border ${idx === activeDayIndex
+                      ? 'bg-primary text-white border-primary'
+                      : 'bg-white dark:bg-surface-dark text-slate-700 dark:text-white border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                  >
+                    {day?.dayHeader || `Day ${idx + 1}`}
+                  </button>
+                ))}
               </div>
 
-              <div className="relative pl-4 space-y-8 pb-4">
+              <div className="relative pl-4 pb-4">
                 <div className="absolute left-[19px] top-2 bottom-0 w-0.5 bg-slate-200 dark:bg-slate-700"></div>
 
-                {/* Timeline Items Map */}
-                {content.timeline.map((event, index) => (
-                  <div key={index} className="relative pl-8 group">
-                    <div className="absolute left-[11px] top-4 size-4 bg-white dark:bg-background-dark border-4 border-slate-300 dark:border-slate-600 rounded-full z-10 group-hover:border-primary transition-colors"></div>
-                    <div className="bg-white dark:bg-surface-dark p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 hover:shadow-md hover:border-primary/30 transition-all cursor-pointer">
-                      <div className="flex justify-between items-start mb-2">
-                        <span className="text-sm font-mono text-slate-500 dark:text-slate-400">{event.time}</span>
+                <div className="flex flex-col gap-10">
+                  {days.map((day: any, dayIndex: number) => (
+                    <div key={dayIndex} className="flex flex-col gap-6">
+                      <div
+                        ref={(el) => {
+                          daySectionRefs.current[dayIndex] = el;
+                        }}
+                        className="flex items-center gap-4 sticky top-0 bg-white/95 dark:bg-background-dark/95 backdrop-blur py-3 z-10 border-b border-slate-100 dark:border-slate-800"
+                      >
+                        <div className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-3 py-1 rounded-lg text-sm font-bold z-10">
+                          {day?.dayHeader || `Day ${dayIndex + 1}`}
+                        </div>
+                        <div className="flex-1">
+                          <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                            {day?.daySubHeader}
+                          </h2>
+                        </div>
+                        <span className="text-xs font-bold text-slate-400 uppercase">{day?.dateShort}</span>
                       </div>
-                      <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">{event.title}</h3>
-                      {event.description && (
-                        <p className="text-sm text-slate-600 dark:text-slate-300 line-clamp-2 mb-2">{event.description}</p>
-                      )}
-                      <div className="flex gap-2 flex-wrap">
-                        {event.tags.map((tag, i) => (
-                          <span
-                            key={i}
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded border ${getTagStyles(tag.color)}`}
-                          >
-                            {tag.label}
-                          </span>
-                        ))}
+
+                      <div className="space-y-8 z-1">
+                        {(day?.timeline || []).map((event: any, index: number) => {
+                          const isExtra = Boolean(event?.isExtra);
+                          return (
+                            <div key={`${dayIndex}-${index}`} className="relative pl-8 group">
+                              <div
+                                className={`absolute left-[11px] top-4 size-4 bg-white dark:bg-background-dark border-4 rounded-full z-10 transition-colors ${isExtra
+                                  ? 'border-amber-300 dark:border-amber-700'
+                                  : 'border-slate-300 dark:border-slate-600 group-hover:border-primary'
+                                  }`}
+                              ></div>
+                              <div
+                                className={`p-4 rounded-xl shadow-sm border transition-all cursor-pointer ${isExtra
+                                  ? 'bg-amber-50/70 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 hover:border-amber-300'
+                                  : 'bg-white dark:bg-surface-dark border-slate-100 dark:border-slate-800 hover:shadow-md hover:border-primary/30'
+                                  }`}
+                              >
+                                <div className="flex justify-between items-start mb-2">
+                                  <span className="text-sm font-mono text-slate-500 dark:text-slate-400">{event.time}</span>
+                                </div>
+                                <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">{event.title}</h3>
+                                {event.description && (
+                                  <p className="text-sm text-slate-600 dark:text-slate-300 line-clamp-2 mb-2">{event.description}</p>
+                                )}
+                                <div className="flex gap-2 flex-wrap">
+                                  {(event.tags || []).map((tag: any, i: number) => (
+                                    <span
+                                      key={i}
+                                      className={`text-[10px] font-bold px-2 py-0.5 rounded border ${getTagStyles(tag.color)}`}
+                                    >
+                                      {tag.label}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           </div>

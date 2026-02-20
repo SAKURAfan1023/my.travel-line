@@ -3,7 +3,7 @@ import re
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, conlist, field_validator
 from dotenv import load_dotenv
 import requests
 
@@ -63,6 +63,11 @@ class SearchSuggestion(BaseModel):
 
 # --- Helper Functions ---
 
+SCENIC_TYPES = "110000|110100|110200|140000|140100|140200|060100"
+TOURISM_TYPES = "110000|110100|140000|060100|190000"
+PLACE_LEVELS = {"country", "province", "city", "district", "township", "street", "street_number", "building", "neighborhood", "village"}
+PLACE_SUFFIXES = ("市", "省", "区", "县", "州", "盟", "旗", "镇", "乡", "村", "街道", "路", "道")
+
 def resolve_adcode(api_key: str, query: str) -> Optional[str]:
     """
     Resolve a city name/query to an adcode using AMap InputTips.
@@ -84,6 +89,111 @@ def resolve_adcode(api_key: str, query: str) -> Optional[str]:
     except Exception as e:
         print(f"Error resolving adcode: {e}")
     return None
+
+def resolve_geocode_level(api_key: str, query: str) -> Optional[str]:
+    url = "https://restapi.amap.com/v3/geocode/geo"
+    params = {
+        "key": api_key,
+        "address": query
+    }
+    try:
+        response = requests.get(url, params=params)
+        data = response.json()
+        if data.get("status") == "1" and data.get("geocodes"):
+            return data["geocodes"][0].get("level")
+    except Exception as e:
+        print(f"Error resolving geocode level: {e}")
+    return None
+
+def fetch_pois(api_key: str, keywords: str, city: Optional[str] = None, types: Optional[str] = None, citylimit: Optional[str] = None, offset: int = 50, page: int = 1):
+    url = "https://restapi.amap.com/v3/place/text"
+    params = {
+        "key": api_key,
+        "keywords": keywords,
+        "offset": offset,
+        "page": page,
+        "extensions": "all"
+    }
+    if city:
+        params["city"] = city
+    if types:
+        params["types"] = types
+    if citylimit is not None:
+        params["citylimit"] = citylimit
+    try:
+        response = requests.get(url, params=params)
+        data = response.json()
+        if data.get("status") == "1" and "pois" in data:
+            return data["pois"]
+    except Exception as e:
+        print(f"Error fetching POIs: {e}")
+    return []
+
+def build_trip_location(poi: dict, tag_counts: dict) -> Optional[TripLocation]:
+    name = poi.get("name", "")
+    poi_type = poi.get("type", "")
+    raw_image_url = ""
+    if poi.get("photos") and len(poi["photos"]) > 0:
+        raw_image_url = poi["photos"][0].get("url", "")
+    lower_name = name.strip()
+    entrance_markers = ["入口", "出入口", "正门", "侧门", "大门", "东门", "西门", "南门", "北门", "停车场入口", "景区入口"]
+    is_entrance_name = any(marker in lower_name for marker in entrance_markers)
+    ends_with_gate = lower_name.endswith(("入口", "出入口", "正门", "侧门", "大门", "东门", "西门", "南门", "北门"))
+    bracket_gate = bool(re.search(r"[（(].*(入口|出入口|正门|侧门|大门|[东南西北]门).*[)）]", lower_name))
+    type_has_gate = "出入口" in poi_type or "门" in poi_type
+    if (is_entrance_name or ends_with_gate or bracket_gate or type_has_gate) and not raw_image_url:
+        return None
+
+    image_url = raw_image_url or "https://via.placeholder.com/400x300?text=No+Image"
+
+    rating = 4.5
+    biz_ext = poi.get("biz_ext", {})
+    if isinstance(biz_ext, dict):
+        r_str = biz_ext.get("rating")
+        if r_str and isinstance(r_str, str):
+            try:
+                rating = float(r_str)
+            except:
+                pass
+
+    derived_tags = []
+    is_nature = "公园" in poi_type or "植物园" in poi_type or "山" in name
+    is_history = "博物馆" in poi_type or "古迹" in poi_type or "寺" in name
+    is_city = "步行街" in poi_type or "广场" in poi_type or "商场" in poi_type or "商业" in poi_type
+    is_coastal = "海滨" in poi_type or "浴场" in poi_type or "岛" in name
+    is_sightseeing = "风景" in poi_type or "景点" in poi_type
+
+    if is_nature:
+        derived_tags.append("Nature")
+        tag_counts["Nature"] += 1
+    if is_history:
+        derived_tags.append("Historical")
+        tag_counts["Historical"] += 1
+    if is_city:
+        derived_tags.append("City Break")
+        tag_counts["City Break"] += 1
+    if is_coastal:
+        derived_tags.append("Coastal")
+        tag_counts["Coastal"] += 1
+    if is_sightseeing:
+        derived_tags.append("Sightseeing")
+        tag_counts["Sightseeing"] += 1
+
+    if not derived_tags:
+        derived_tags = ["General"]
+
+    return TripLocation(
+        id=poi.get("id"),
+        name=poi.get("name"),
+        country="China",
+        province=poi.get("pname"),
+        city=poi.get("cityname"),
+        district=poi.get("adname"),
+        image=image_url,
+        rating=rating,
+        tags=derived_tags,
+        daysRecommended=1
+    )
 
 # --- API Endpoints ---
 
@@ -139,29 +249,6 @@ def recommend_locations(city: str, tags: Optional[str] = None):
     if not api_key:
         raise HTTPException(status_code=500, detail="AMAP_KEY not configured")
 
-    # If city is not numeric (adcode), try to resolve it
-    if not city.isdigit():
-        resolved_adcode = resolve_adcode(api_key, city)
-        if resolved_adcode:
-            city = resolved_adcode
-
-    # 1. First, fetch ALL relevant POIs for the city to calculate tag counts globally for this city
-    # We'll use a broad search first
-    base_keywords = "景点"
-    base_types = "110000|110100|140000|060100|190000"
-    
-    url = "https://restapi.amap.com/v3/place/text"
-    params = {
-        "key": api_key,
-        "keywords": base_keywords,
-        "city": city,
-        "types": base_types,
-        "citylimit": "true",
-        "extensions": "all",
-        "offset": 50, # Fetch more for better counts
-        "page": 1
-    }
-
     all_locations = []
     tag_counts = {
         "Nature": 0,
@@ -172,71 +259,34 @@ def recommend_locations(city: str, tags: Optional[str] = None):
     }
 
     try:
-        response = requests.get(url, params=params)
-        data = response.json()
-        
-        if data["status"] == "1" and "pois" in data:
-            for poi in data["pois"]:
-                name = poi.get("name", "")
-                poi_type = poi.get("type", "")
-                raw_image_url = ""
-                if poi.get("photos") and len(poi["photos"]) > 0:
-                    raw_image_url = poi["photos"][0].get("url", "")
-                lower_name = name.strip()
-                entrance_markers = ["入口", "出入口", "正门", "侧门", "大门", "东门", "西门", "南门", "北门", "停车场入口", "景区入口"]
-                is_entrance_name = any(marker in lower_name for marker in entrance_markers)
-                ends_with_gate = lower_name.endswith(("入口", "出入口", "正门", "侧门", "大门", "东门", "西门", "南门", "北门"))
-                bracket_gate = bool(re.search(r"[（(].*(入口|出入口|正门|侧门|大门|[东南西北]门).*[)）]", lower_name))
-                type_has_gate = "出入口" in poi_type or "门" in poi_type
-                if (is_entrance_name or ends_with_gate or bracket_gate or type_has_gate) and not raw_image_url:
-                    continue
+        input_query = city
+        looks_like_place_name = input_query.endswith(PLACE_SUFFIXES)
+        if not looks_like_place_name and not input_query.isdigit():
+            geocode_level = resolve_geocode_level(api_key, input_query)
+            if geocode_level in PLACE_LEVELS:
+                looks_like_place_name = True
 
-                # Map AMap POI to TripLocation
-                image_url = raw_image_url
-                if not image_url:
-                    image_url = "https://via.placeholder.com/400x300?text=No+Image"
+        scenic_pois = []
+        if not looks_like_place_name and not input_query.isdigit():
+            scenic_pois = fetch_pois(api_key, input_query, types=SCENIC_TYPES, citylimit="false", offset=20, page=1)
 
-                rating = 4.5
-                biz_ext = poi.get("biz_ext", {})
-                if isinstance(biz_ext, dict):
-                    r_str = biz_ext.get("rating")
-                    if r_str and isinstance(r_str, str):
-                        try:
-                            rating = float(r_str)
-                        except:
-                            pass
-                
-                # Derive tags
-                derived_tags = []
-                
-                is_nature = "公园" in poi_type or "植物园" in poi_type or "山" in name
-                is_history = "博物馆" in poi_type or "古迹" in poi_type or "寺" in name
-                is_city = "步行街" in poi_type or "广场" in poi_type or "商场" in poi_type or "商业" in poi_type
-                is_coastal = "海滨" in poi_type or "浴场" in poi_type or "岛" in name
-                is_sightseeing = "风景" in poi_type or "景点" in poi_type
+        if scenic_pois:
+            for poi in scenic_pois:
+                loc = build_trip_location(poi, tag_counts)
+                if loc:
+                    all_locations.append(loc)
+        else:
+            target_city = input_query
+            if not target_city.isdigit():
+                resolved_adcode = resolve_adcode(api_key, target_city)
+                if resolved_adcode:
+                    target_city = resolved_adcode
 
-                if is_nature: derived_tags.append("Nature"); tag_counts["Nature"] += 1
-                if is_history: derived_tags.append("Historical"); tag_counts["Historical"] += 1
-                if is_city: derived_tags.append("City Break"); tag_counts["City Break"] += 1
-                if is_coastal: derived_tags.append("Coastal"); tag_counts["Coastal"] += 1
-                if is_sightseeing: derived_tags.append("Sightseeing"); tag_counts["Sightseeing"] += 1
-                
-                if not derived_tags:
-                    derived_tags = ["General"]
-
-                loc = TripLocation(
-                    id=poi.get("id"),
-                    name=poi.get("name"),
-                    country="China",
-                    province=poi.get("pname"),
-                    city=poi.get("cityname"),
-                    district=poi.get("adname"),
-                    image=image_url,
-                    rating=rating,
-                    tags=derived_tags,
-                    daysRecommended=1
-                )
-                all_locations.append(loc)
+            base_pois = fetch_pois(api_key, "景点", city=target_city, types=TOURISM_TYPES, citylimit="true", offset=50, page=1)
+            for poi in base_pois:
+                loc = build_trip_location(poi, tag_counts)
+                if loc:
+                    all_locations.append(loc)
 
         # 2. Filter locations based on requested tags
         filtered_locations = []
@@ -293,11 +343,20 @@ class TripPreferences(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     selected_locations: List[TripLocation]
-    budget: List[int]
+    budget: conlist(int, min_length=2, max_length=2)
     interests: List[str] = []
     transport: Optional[str] = None
     dining_prefs: List[str] = []
     accommodation_prefs: List[str] = []
+
+    @field_validator("budget")
+    @classmethod
+    def validate_budget(cls, v):
+        if v[0] < 0 or v[1] < 0:
+            raise ValueError("budget must be non-negative")
+        if v[0] > v[1]:
+            raise ValueError("budget min must be <= max")
+        return v
 
 @app.post("/api/generate-itinerary")
 def generate_itinerary(prefs: TripPreferences):
@@ -364,6 +423,11 @@ def generate_itinerary(prefs: TripPreferences):
                 raw_output = raw_output.split("```")[1].split("```")[0]
             
             json_output = json.loads(raw_output.strip())
+            if isinstance(json_output, dict):
+                json_output.setdefault(
+                    "budgetRange",
+                    {"min": prefs.budget[0], "max": prefs.budget[1], "currency": "¥"},
+                )
             return json_output
         except Exception as e:
             print(f"JSON Parse Error: {e}")
