@@ -197,6 +197,7 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
   const mapRef = React.useRef<any>(null);
   const AMapRef = React.useRef<any>(null); // Store AMap class reference
   const markersRef = React.useRef<any[]>([]);
+  const routeRenderersRef = React.useRef<any[]>([]); // Store route renderers (Driving, Transfer, etc.)
   const ignoreNextMapClickRef = React.useRef(false);
   const mapClickHandlerRef = React.useRef<(() => void) | null>(null);
   const mapZoomHandlerRef = React.useRef<(() => void) | null>(null);
@@ -328,14 +329,20 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
     setActiveDayIndex(dayIndex);
   }, []);
 
-  const scrollToEvent = React.useCallback((dayIndex: number, eventIndex: number) => {
+  const scrollToEvent = React.useCallback((dayIndex: number, eventIndex: number, smooth: boolean = true) => {
     const container = timelineScrollRef.current;
     const target = timelineEventRefs.current?.[dayIndex]?.[eventIndex];
     if (container && target) {
       const containerRect = container.getBoundingClientRect();
       const targetRect = target.getBoundingClientRect();
       const relativeTop = targetRect.top - containerRect.top;
-      container.scrollTo({ top: container.scrollTop + relativeTop - 24, behavior: 'smooth' });
+      const targetScrollTop = container.scrollTop + relativeTop - 24;
+
+      if (smooth) {
+        container.scrollTo({ top: targetScrollTop, behavior: 'smooth' });
+      } else {
+        container.scrollTop = targetScrollTop;
+      }
     }
     setActiveDayIndex(dayIndex);
   }, []);
@@ -437,7 +444,7 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
     AMapLoader.load({
       key: amapKey,
       version: "2.0",
-      plugins: ["AMap.Scale", "AMap.ToolBar"], // Removed ControlBar which can cause issues with some keys/versions
+      plugins: ["AMap.Scale", "AMap.ToolBar", "AMap.Driving", "AMap.Transfer", "AMap.Walking", "AMap.Riding"], // Added route planning plugins
     })
       .then((AMap) => {
         AMapRef.current = AMap;
@@ -576,13 +583,59 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
         const matchedEvent = findEventIndexForPin(pin);
         if (matchedEvent) {
           window.requestAnimationFrame(() => {
-            scrollToEvent(matchedEvent.dayIndex, matchedEvent.eventIndex);
+            scrollToEvent(matchedEvent.dayIndex, matchedEvent.eventIndex, false);
           });
         }
       });
 
       marker.setMap(mapRef.current);
       markersRef.current.push(marker);
+    });
+
+    // Clear old routes
+    routeRenderersRef.current.forEach(renderer => renderer.clear());
+    routeRenderersRef.current = [];
+
+    // Draw routes for the active day
+    const travelEvents = activeDay?.timeline?.filter((e: any) => e.type === 'travel' && e.travelDetails) || [];
+    travelEvents.forEach((event: any) => {
+      const details = event.travelDetails;
+      if (!details) return;
+
+      const originPin = orderedPins.find(p => p.__dayIndex === activeDayIndex && String(p.id) === String(details.originId));
+      const destPin = orderedPins.find(p => p.__dayIndex === activeDayIndex && String(p.id) === String(details.destinationId));
+
+      if (originPin && destPin && originPin.lng && originPin.lat && destPin.lng && destPin.lat) {
+        let Renderer;
+        const mode = (details.mode || 'transit').toLowerCase();
+
+        if (mode === 'driving') Renderer = AMap.Driving;
+        else if (mode === 'walking') Renderer = AMap.Walking;
+        else if (mode === 'bicycling') Renderer = AMap.Riding;
+        else Renderer = AMap.Transfer; // Default to Transit
+
+        if (Renderer) {
+          const renderer = new Renderer({
+            map: map,
+            hideMarkers: true, // Use our own custom markers
+            policy: mode === 'transit' ? AMap.TransferPolicy.LEAST_TIME : undefined,
+            city: '西安', // Ideally should be dynamic from props/context
+            autoFitView: false,
+          });
+
+          renderer.search(
+            new AMap.LngLat(originPin.lng, originPin.lat),
+            new AMap.LngLat(destPin.lng, destPin.lat),
+            (status: string, result: any) => {
+              // Handle result if needed (e.g., error logging)
+              if (status === 'error') {
+                console.warn(`Route planning failed for ${mode}:`, result);
+              }
+            }
+          );
+          routeRenderersRef.current.push(renderer);
+        }
+      }
     });
 
     if (!hasInitialFitRef.current && markersRef.current.length > 0) {
@@ -711,9 +764,14 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
                     </button>
                   </div>
                   <div className="p-4 bg-white dark:bg-surface-dark">
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-bold text-lg leading-tight text-slate-900 dark:text-white">{selectedPin.title || selectedPin.name}</h3>
-                      {selectedPin.duration && <span className="text-xs font-medium text-slate-500 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded whitespace-nowrap ml-2">{selectedPin.duration}</span>}
+                    <div className="flex justify-between items-start mb-2 gap-2">
+                      <h3 className="font-bold text-lg leading-tight text-slate-900 dark:text-white flex-1">{selectedPin.title || selectedPin.name}</h3>
+                      <div className="flex flex-col items-end gap-1 flex-none">
+                        {selectedPin.duration && <span className="text-xs font-medium text-slate-500 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded whitespace-nowrap">{selectedPin.duration}</span>}
+                        {selectedPin.estimatedCost && (
+                          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">¥{selectedPin.estimatedCost}</span>
+                        )}
+                      </div>
                     </div>
                     {selectedPin.description && <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 line-clamp-2">{selectedPin.description}</p>}
                     {selectedPin.aiStrategy && (
@@ -783,7 +841,7 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
           <div
             ref={timelineScrollRef}
             onScroll={handleTimelineScroll}
-            className="flex-1 overflow-y-auto px-6 py-4 scroll-smooth bg-slate-50/50 dark:bg-transparent"
+            className="flex-1 overflow-y-auto px-6 py-4 bg-slate-50/50 dark:bg-transparent"
           >
             <div className="flex flex-col gap-6">
               <div className="flex items-center gap-2 flex-wrap">
@@ -862,7 +920,26 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
                               >
                                 <div className="flex justify-between items-start mb-2">
                                   <span className="text-sm font-mono text-slate-500 dark:text-slate-400">{event.time}</span>
+                                  {event.estimatedCost && (
+                                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded border border-emerald-100 dark:border-emerald-800">
+                                      ¥{event.estimatedCost}
+                                    </span>
+                                  )}
                                 </div>
+                                {event.type === 'travel' && event.travelDetails && (
+                                  <div className="flex items-center gap-2 mb-1 text-primary">
+                                    <span className="material-symbols-outlined text-lg">
+                                      {event.travelDetails.mode === 'driving' ? 'directions_car' :
+                                        event.travelDetails.mode === 'walking' ? 'directions_walk' :
+                                          event.travelDetails.mode === 'bicycling' ? 'directions_bike' : 'directions_transit'}
+                                    </span>
+                                    <span className="text-xs font-bold uppercase">{event.travelDetails.mode || 'Transit'}</span>
+                                    <span className="text-xs">•</span>
+                                    <span className="text-xs">{event.travelDetails.duration}</span>
+                                    <span className="text-xs">•</span>
+                                    <span className="text-xs">{event.travelDetails.distance}</span>
+                                  </div>
+                                )}
                                 <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">{event.title}</h3>
                                 {event.description && (
                                   <p className="text-sm text-slate-600 dark:text-slate-300 line-clamp-2 mb-2">{event.description}</p>

@@ -40,7 +40,7 @@ class TravelAgents:
             role='逻辑严密的行程架构师',
             goal='将调研员提供的景点串联成一条逻辑合理、不走回头路的每日行程',
             backstory='你是空间规划专家，擅长平衡交通时间、游览时长和用户体力。',
-            tools=[MapTools.calculate_travel_time, MapTools.optimize_route],
+            tools=[MapTools.calculate_travel_time, MapTools.optimize_route, MapTools.search_places],
             verbose=True,
             llm=self.llm,
             allow_delegation=False

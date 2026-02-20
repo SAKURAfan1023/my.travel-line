@@ -45,6 +45,17 @@ class TravelTasks:
                 8. 必须覆盖所有 Selected Locations：每个景点必须出现在某一天的 mapPins 中且只出现一次（除非用户明确重复），并标注 isExtra 为 false。
                 9. 所有新增景点或活动必须标注 isExtra 为 true，并在 timeline 与 mapPins 中保持一致。
                 10. mapPins 必须按实际游玩时间顺序排列，并为每个地点提供全局顺序号 `seq`（从 1 开始，跨天连续递增），用于地图标注数字。
+                11. **预算规划**:
+                    - 必须根据 `{budget}` (e.g. Low, Medium, High, or specific amount) 估算每项活动的费用。
+                    - 考虑季节性（如旺季价格上浮）和周末（周五-周日）价格上浮因素。
+                    - 若调用 `amap_poi_search` 获取到 `cost` 信息，请参考该价格；否则根据经验估算。
+                    - 在输出中明确每一步的预计花费。
+                12. **交通规划**:
+                    - 必须使用 `{transport}` 作为主要交通方式（若为空或未指定，默认使用 'transit'）。
+                    - 使用 `distance_calculator` 工具计算相邻活动/景点间的交通时间、距离与费用。
+                    - 在 timeline 中显式添加交通事件（"type": "travel"），位于两个活动之间。
+                    - 交通事件的 `description` 应包含具体的路线信息（如“地铁2号线 -> 5路公交”）。
+                    - 确保行程安排的时间流包含交通耗时。
 
                 **输出格式:**
                 必须返回严格有效的 JSON 对象（不能包含 Markdown 或代码块），结构如下:
@@ -70,7 +81,9 @@ class TravelTasks:
                                   "title": "Location Name",
                                   "duration": "2h",
                                   "description": "Short description...",
-                                  "aiStrategy": "AI tip..."
+                                  "aiStrategy": "AI tip...",
+                                  "estimatedCost": 50,
+                                  "costDescription": "Ticket: ¥50"
                                 }
                             ],
                             "timeline": [
@@ -79,7 +92,25 @@ class TravelTasks:
                                     "title": "Activity Title",
                                     "description": "Description...",
                                     "isExtra": false,
-                                    "tags": [{ "label": "Sightseeing", "color": "blue" }]
+                                    "tags": [{ "label": "Sightseeing", "color": "blue" }],
+                                    "estimatedCost": 50,
+                                    "type": "activity"
+                                },
+                                {
+                                    "time": "11:00 AM",
+                                    "title": "Travel to Next Location",
+                                    "description": "Taxi / Subway Line 1...",
+                                    "isExtra": false,
+                                    "tags": [{ "label": "Travel", "color": "gray" }],
+                                    "estimatedCost": 20,
+                                    "type": "travel",
+                                    "travelDetails": {
+                                        "mode": "transit",
+                                        "duration": "30 min",
+                                        "distance": "5.2 km",
+                                        "originId": 1,
+                                        "destinationId": 2
+                                    }
                                 }
                             ]
                         }

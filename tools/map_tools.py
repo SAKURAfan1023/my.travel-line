@@ -27,14 +27,16 @@ class MapTools:
             return None
 
     @tool("distance_calculator")
-    def calculate_travel_time(origin: str, destination: str) -> str:
+    def calculate_travel_time(origin: str, destination: str, mode: str = "transit", city: str = "西安") -> str:
         """
-        根据两个点的坐标，调用地图 API 计算真实的通勤时间。
+        Calculate travel time, distance, and cost between two points using AMap API.
         Args:
-            origin (str): Starting point address.
-            destination (str): End point address.
+            origin (str): Starting point address or name.
+            destination (str): End point address or name.
+            mode (str): Transport mode. Options: "driving", "walking", "transit" (public transport), "bicycling". Default: "transit".
+            city (str): City name for transit routing (required for transit). Default: "西安".
         Returns:
-            str: Travel duration and distance.
+            str: Travel details including duration, distance, cost, and brief route info.
         """
         api_key = os.getenv("AMAP_KEY")
         if not api_key:
@@ -47,31 +49,73 @@ class MapTools:
         if not origin_coords or not dest_coords:
             return f"Error: Could not find coordinates for {origin} or {destination}."
 
-        # 2. Call Direction API (Driving as default)
-        base_url = "https://restapi.amap.com/v3/direction/driving"
+        # 2. Select API based on mode
+        mode = mode.lower()
+        if mode == "driving":
+            url = "https://restapi.amap.com/v3/direction/driving"
+        elif mode == "walking":
+            url = "https://restapi.amap.com/v3/direction/walking"
+        elif mode == "bicycling":
+            url = "https://restapi.amap.com/v4/direction/bicycling" # v4 for bicycling
+        elif mode == "transit":
+            url = "https://restapi.amap.com/v3/direction/transit/integrated"
+        else:
+            return f"Error: Unsupported mode '{mode}'. Use driving, walking, transit, or bicycling."
         
         params = {
             "origin": origin_coords,
             "destination": dest_coords,
             "key": api_key,
-            "extensions": "base"
         }
+
+        if mode == "driving":
+            params["extensions"] = "base"
+        elif mode == "transit":
+            params["city"] = city
+            params["strategy"] = "0" # 0: Fastest
         
         try:
-            response = requests.get(base_url, params=params)
+            response = requests.get(url, params=params)
             data = response.json()
             
-            if data["status"] == "1" and data["route"]["paths"]:
-                path = data["route"]["paths"][0]
-                distance_meters = int(path["distance"])
-                duration_seconds = int(path["duration"])
+            if data.get("status") == "1" or (mode == "bicycling" and data.get("errcode") == 0):
+                route = data.get("data") if mode == "bicycling" else data.get("route")
+                paths = route.get("paths") if route else None
+                transits = route.get("transits") if mode == "transit" and route else None
                 
+                if mode == "transit":
+                    if not transits:
+                         return f"No transit route found between {origin} and {destination}."
+                    path = transits[0] # Take the first (best) route
+                    distance_meters = int(path.get("distance", 0))
+                    duration_seconds = int(path.get("duration", 0))
+                    cost = path.get("cost", 0)
+                    if isinstance(cost, str): cost = float(cost) if cost else 0
+                    
+                    segments = path.get("segments", [])
+                    lines = []
+                    for seg in segments:
+                        bus = seg.get("bus", {}).get("buslines", [])
+                        if bus: lines.append(bus[0]["name"])
+                    route_desc = " -> ".join(lines) if lines else "Public Transit"
+                    
+                else:
+                    if not paths:
+                        return f"No {mode} route found between {origin} and {destination}."
+                    path = paths[0]
+                    distance_meters = int(path.get("distance", 0))
+                    duration_seconds = int(path.get("duration", 0))
+                    cost = 0
+                    if mode == "driving":
+                        cost = float(path.get("tolls", 0))
+                    route_desc = f"{mode.capitalize()} Route"
+
                 distance_km = distance_meters / 1000
                 duration_min = duration_seconds // 60
                 
-                return f"{origin} 到 {destination} 预计开车 {duration_min} 分钟 ({distance_km:.1f} km)"
+                return f"From {origin} to {destination} by {mode}: {duration_min} min, {distance_km:.1f} km. Estimated Cost: ¥{cost}. Route: {route_desc}"
             else:
-                return f"No routes found between {origin} and {destination}. (API Info: {data.get('info')})"
+                return f"No routes found. (API Info: {data.get('info')})"
         except Exception as e:
             return f"Error calculating travel time: {str(e)}"
 
@@ -83,7 +127,7 @@ class MapTools:
             query (str): Search keywords (e.g., "景点", "美食").
             city (str): City name to search in.
         Returns:
-            str: A list of found places with their names, addresses, and coordinates.
+            str: A list of found places with their names, ratings, costs, addresses, and coordinates.
         """
         api_key = os.getenv("AMAP_KEY")
         if not api_key:
@@ -112,7 +156,8 @@ class MapTools:
                     location = poi.get("location")
                     biz_ext = poi.get("biz_ext", {})
                     rating = biz_ext.get("rating", "N/A")
-                    results.append(f"- {name} (Rating: {rating}): {address} [Coords: {location}]")
+                    cost = biz_ext.get("cost", "N/A")
+                    results.append(f"- {name} (Rating: {rating}, Cost: {cost}): {address} [Coords: {location}]")
                 return "\n".join(results)
             else:
                 return f"No places found for '{query}' in {city}."
