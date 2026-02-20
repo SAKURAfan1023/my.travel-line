@@ -141,10 +141,8 @@ def build_trip_location(poi: dict, tag_counts: dict) -> Optional[TripLocation]:
     ends_with_gate = lower_name.endswith(("入口", "出入口", "正门", "侧门", "大门", "东门", "西门", "南门", "北门"))
     bracket_gate = bool(re.search(r"[（(].*(入口|出入口|正门|侧门|大门|[东南西北]门).*[)）]", lower_name))
     type_has_gate = "出入口" in poi_type or "门" in poi_type
-    if (is_entrance_name or ends_with_gate or bracket_gate or type_has_gate) and not raw_image_url:
+    if not raw_image_url:
         return None
-
-    image_url = raw_image_url or "https://via.placeholder.com/400x300?text=No+Image"
 
     rating = 4.5
     biz_ext = poi.get("biz_ext", {})
@@ -189,7 +187,7 @@ def build_trip_location(poi: dict, tag_counts: dict) -> Optional[TripLocation]:
         province=poi.get("pname"),
         city=poi.get("cityname"),
         district=poi.get("adname"),
-        image=image_url,
+        image=raw_image_url,
         rating=rating,
         tags=derived_tags,
         daysRecommended=1

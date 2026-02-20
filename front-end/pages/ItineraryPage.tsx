@@ -70,6 +70,7 @@ const itineraryContent = {
         time: "09:30 AM",
         title: "Kinkaku-ji (Golden Pavilion)",
         description: "Iconic Zen Buddhist temple covered in gold leaf. Best viewed in the morning light reflecting on the pond.",
+        pinId: 1,
         tags: [{ label: "Sightseeing", color: "slate" }, { label: "Must See", color: "yellow" }]
       },
       {
@@ -82,6 +83,7 @@ const itineraryContent = {
         time: "02:30 PM",
         title: "Fushimi Inari Taisha",
         description: "Shinto shrine famous for its thousands of vermilion torii gates.",
+        pinId: 2,
         tags: [{ label: "Activity", color: "slate" }, { label: "Crowded", color: "red" }]
       },
       {
@@ -153,6 +155,7 @@ const itineraryContent = {
         time: "09:30 AM",
         title: "金阁寺",
         description: "标志性的禅宗寺庙，覆盖着金箔。在晨光映照的池塘边观赏最佳。",
+        pinId: 1,
         tags: [{ label: "观光", color: "slate" }, { label: "必看", color: "yellow" }]
       },
       {
@@ -165,6 +168,7 @@ const itineraryContent = {
         time: "02:30 PM",
         title: "伏见稻荷大社",
         description: "以成千上万的朱红色鸟居闻名的神社。",
+        pinId: 2,
         tags: [{ label: "活动", color: "slate" }, { label: "拥挤", color: "red" }]
       },
       {
@@ -183,7 +187,8 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
   // State for itinerary content
   const [content, setContent] = useState<any>(itineraryContent[language]);
   const [loading, setLoading] = useState(true);
-  const [selectedPinKey, setSelectedPinKey] = useState<string | null>(null);
+  const [selectedPinKey, setSelectedPinKey] = useState<string | null>(null); // Controls the details overlay
+  const [focusedPinKey, setFocusedPinKey] = useState<string | null>(null); // Controls the visual highlighting
   const [mapZoom, setMapZoom] = useState(11);
   const [mapCenter, setMapCenter] = useState<{ lng: number; lat: number } | null>(null);
   const [mapError, setMapError] = useState(false);
@@ -194,6 +199,8 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
   const markersRef = React.useRef<any[]>([]);
   const ignoreNextMapClickRef = React.useRef(false);
   const mapClickHandlerRef = React.useRef<(() => void) | null>(null);
+  const mapZoomHandlerRef = React.useRef<(() => void) | null>(null);
+  const hasInitialFitRef = React.useRef(false);
 
   React.useEffect(() => {
     // Check if we have generated data in localStorage
@@ -230,6 +237,7 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
 
   React.useEffect(() => {
     setSelectedPinKey(null);
+    setFocusedPinKey(null);
   }, [activeDayIndex]);
 
   const orderedPins = React.useMemo(() => {
@@ -259,18 +267,107 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
     return pins;
   }, [days]);
 
+  const findPinForEvent = React.useCallback(
+    (dayIndex: number, event: any) => {
+      if (!event) return null;
+      // 1. Try explicit ID match
+      const pinId = event?.pinId ?? event?.mapPinId ?? event?.pin_id;
+      if (pinId != null) {
+        const byId = orderedPins.find(
+          (pin) => pin.__dayIndex === dayIndex && String(pin.id) === String(pinId)
+        );
+        if (byId) return byId;
+      }
+      // 2. Try Name/Title fuzzy match
+      const eventTitle = event?.title;
+      if (eventTitle) {
+        const byName = orderedPins.find((pin) => {
+          if (pin.__dayIndex !== dayIndex) return false;
+          const pName = pin.name || "";
+          const pTitle = pin.title || "";
+          return (
+            (pName && eventTitle.includes(pName)) ||
+            (pTitle && eventTitle.includes(pTitle)) ||
+            (pName && pName.includes(eventTitle))
+          );
+        });
+        if (byName) return byName;
+      }
+      return null;
+    },
+    [orderedPins]
+  );
+
+  const focusPin = React.useCallback((pin: any, showDetails: boolean = true) => {
+    if (!pin?.lng || !pin?.lat) return;
+    setActiveDayIndex(pin.__dayIndex ?? 0);
+    setFocusedPinKey(pin.__key);
+    if (showDetails) {
+      setSelectedPinKey(pin.__key);
+    } else {
+      setSelectedPinKey(null);
+    }
+    setMapCenter({ lng: pin.lng, lat: pin.lat });
+    setMapZoom((z) => (z < 14 ? 14 : z));
+  }, []);
+
   const timelineScrollRef = React.useRef<HTMLDivElement | null>(null);
   const daySectionRefs = React.useRef<Array<HTMLDivElement | null>>([]);
+  const timelineEventRefs = React.useRef<Array<Array<HTMLDivElement | null>>>([]);
   const timelineScrollRafRef = React.useRef<number | null>(null);
 
   const scrollToDay = React.useCallback((dayIndex: number) => {
     const container = timelineScrollRef.current;
     const target = daySectionRefs.current[dayIndex];
     if (container && target) {
-      container.scrollTo({ top: target.offsetTop - 8, behavior: 'smooth' });
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const relativeTop = targetRect.top - containerRect.top;
+      container.scrollTo({ top: container.scrollTop + relativeTop - 8, behavior: 'smooth' });
     }
     setActiveDayIndex(dayIndex);
   }, []);
+
+  const scrollToEvent = React.useCallback((dayIndex: number, eventIndex: number) => {
+    const container = timelineScrollRef.current;
+    const target = timelineEventRefs.current?.[dayIndex]?.[eventIndex];
+    if (container && target) {
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const relativeTop = targetRect.top - containerRect.top;
+      container.scrollTo({ top: container.scrollTop + relativeTop - 24, behavior: 'smooth' });
+    }
+    setActiveDayIndex(dayIndex);
+  }, []);
+
+  const findEventIndexForPin = React.useCallback(
+    (pin: any) => {
+      const dayIndex = pin?.__dayIndex ?? 0;
+      const day = days[dayIndex];
+      if (!day) return null;
+      const timeline = day?.timeline || [];
+      const pinId = pin?.id;
+      const pinName = pin?.name;
+      const pinTitle = pin?.title;
+
+      for (let i = 0; i < timeline.length; i += 1) {
+        const event = timeline[i];
+        // 1. ID match
+        const eventPinId = event?.pinId ?? event?.mapPinId ?? event?.pin_id;
+        if (pinId != null && eventPinId != null && String(pinId) === String(eventPinId)) {
+          return { dayIndex, eventIndex: i };
+        }
+        // 2. Name match
+        if (event.title) {
+          if (pinName && event.title.includes(pinName)) return { dayIndex, eventIndex: i };
+          if (pinTitle && event.title.includes(pinTitle)) return { dayIndex, eventIndex: i };
+          if (pinName && pinName.includes(event.title)) return { dayIndex, eventIndex: i };
+        }
+      }
+      return null;
+    },
+    [days]
+  );
 
   const handleTimelineScroll = React.useCallback(() => {
     if (timelineScrollRafRef.current != null) return;
@@ -316,6 +413,10 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
     }
   }, [content, activeDay]);
 
+  React.useEffect(() => {
+    hasInitialFitRef.current = false;
+  }, [content]);
+
   const resolvedCenter = mapCenter || { lng: 116.397428, lat: 39.90923 };
   const amapKey = ((import.meta as any).env?.VITE_AMAP_JS_KEY || (import.meta as any).env?.VITE_AMAP_KEY) as string | undefined;
   const amapSecurityCode = (import.meta as any).env?.VITE_AMAP_SECURITY_CODE as string | undefined;
@@ -353,44 +454,88 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
           mapRef.current.off('click', mapClickHandlerRef.current);
           mapClickHandlerRef.current = null;
         }
+        if (mapZoomHandlerRef.current) {
+          mapRef.current.off('zoomend', mapZoomHandlerRef.current);
+          mapZoomHandlerRef.current = null;
+        }
         mapRef.current.destroy();
         mapRef.current = null;
       }
     };
   }, [amapKey]);
 
-  // Update Map View & Markers
+  // Initialize Map
   React.useEffect(() => {
-    if (!isMapLoaded || !mapContainerRef.current || !AMapRef.current) return;
+    if (!isMapLoaded || !mapContainerRef.current || !AMapRef.current || mapRef.current) return;
 
     const AMap = AMapRef.current;
+    try {
+      const map = new AMap.Map(mapContainerRef.current, {
+        zoom: mapZoom,
+        center: [resolvedCenter.lng, resolvedCenter.lat],
+        viewMode: '2D', // Force 2D to avoid WebGL/Key issues
+      });
+      map.addControl(new AMap.Scale());
+      map.addControl(new AMap.ToolBar({ position: 'LT' }));
+      const handleMapClick = () => {
+        if (ignoreNextMapClickRef.current) {
+          ignoreNextMapClickRef.current = false;
+          return;
+        }
+        setSelectedPinKey(null);
+        setFocusedPinKey(null);
+      };
+      mapClickHandlerRef.current = handleMapClick;
+      map.on('click', handleMapClick);
+      const handleZoomEnd = () => {
+        const nextZoom = map.getZoom();
+        if (typeof nextZoom === 'number') {
+          setMapZoom(nextZoom);
+        }
+      };
+      mapZoomHandlerRef.current = handleZoomEnd;
+      map.on('zoomend', handleZoomEnd);
+      mapRef.current = map;
+    } catch (e) {
+      console.error("Map init failed", e);
+      setMapError(true);
+    }
 
-    if (!mapRef.current) {
-      try {
-        mapRef.current = new AMap.Map(mapContainerRef.current, {
-          zoom: mapZoom,
-          center: [resolvedCenter.lng, resolvedCenter.lat],
-          viewMode: '2D', // Force 2D to avoid WebGL/Key issues
-        });
-        mapRef.current.addControl(new AMap.Scale());
-        mapRef.current.addControl(new AMap.ToolBar({ position: 'LT' }));
-        const handleMapClick = () => {
-          if (ignoreNextMapClickRef.current) {
-            ignoreNextMapClickRef.current = false;
-            return;
-          }
-          setSelectedPinKey(null);
-        };
-        mapClickHandlerRef.current = handleMapClick;
-        mapRef.current.on('click', handleMapClick);
-      } catch (e) {
-        console.error("Map init failed", e);
-        setMapError(true);
-        return;
+    return () => {
+      if (mapRef.current) {
+        if (mapClickHandlerRef.current) {
+          mapRef.current.off('click', mapClickHandlerRef.current);
+          mapClickHandlerRef.current = null;
+        }
+        if (mapZoomHandlerRef.current) {
+          mapRef.current.off('zoomend', mapZoomHandlerRef.current);
+          mapZoomHandlerRef.current = null;
+        }
+        mapRef.current.destroy();
+        mapRef.current = null;
       }
-    } else {
-      mapRef.current.setZoom(mapZoom);
-      mapRef.current.setCenter([resolvedCenter.lng, resolvedCenter.lat]);
+    };
+  }, [isMapLoaded]);
+
+  // Update Map View & Markers
+  React.useEffect(() => {
+    if (!mapRef.current || !AMapRef.current) return;
+
+    const AMap = AMapRef.current;
+    const map = mapRef.current;
+
+    // Update View
+    const currentZoom = map.getZoom();
+    if (currentZoom !== mapZoom) {
+      map.setZoom(mapZoom);
+    }
+    // Only update center if distance is significant to avoid jitter or conflict with drag
+    const currentCenter = map.getCenter();
+    const currentLng = typeof currentCenter?.getLng === 'function' ? currentCenter.getLng() : currentCenter.lng;
+    const currentLat = typeof currentCenter?.getLat === 'function' ? currentCenter.getLat() : currentCenter.lat;
+
+    if (Math.abs(currentLng - resolvedCenter.lng) > 0.0001 || Math.abs(currentLat - resolvedCenter.lat) > 0.0001) {
+      map.setCenter([resolvedCenter.lng, resolvedCenter.lat]);
     }
 
     // Clear old markers
@@ -401,9 +546,13 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
     orderedPins.forEach((pin: any) => {
       if (!pin?.lng || !pin?.lat) return;
       const displayNumber = pin?.__seq ?? pin?.seq ?? pin?.id;
+      const isActive = pin.__key === focusedPinKey;
+      const badgeColor = isActive ? 'bg-primary text-white' : 'bg-slate-700 text-white';
+      const ringColor = isActive ? 'ring-primary/30 dark:ring-primary/40' : 'ring-white/50 dark:ring-black/20';
+      const scaleClass = isActive ? 'scale-110' : '';
       const markerContent = `
-        <div class="relative group cursor-pointer transform transition-transform hover:scale-110">
-          <div class="w-10 h-10 bg-primary text-white rounded-full flex items-center justify-center font-bold shadow-lg ring-4 ring-white/50 dark:ring-black/20 text-sm">
+        <div class="relative group cursor-pointer transform transition-transform hover:scale-110 ${scaleClass}">
+          <div class="w-10 h-10 ${badgeColor} rounded-full flex items-center justify-center font-bold shadow-lg ring-4 ${ringColor} text-sm transition-colors">
             ${displayNumber}
           </div>
           <div class="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-white dark:bg-surface-dark px-3 py-1 rounded-full text-xs font-bold shadow-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity text-slate-800 dark:text-white pointer-events-none z-50">
@@ -416,18 +565,39 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
         position: [pin.lng, pin.lat],
         content: markerContent,
         offset: new AMap.Pixel(-20, -20), // Center the custom marker (40x40 / 2)
-        zIndex: pin.__dayIndex === activeDayIndex ? 100 : 50,
+        zIndex: isActive ? 200 : pin.__dayIndex === activeDayIndex ? 120 : 50,
       });
 
       marker.on('click', () => {
         ignoreNextMapClickRef.current = true;
+        // Map click -> show details
         setSelectedPinKey(pin.__key);
+        setFocusedPinKey(pin.__key);
+        const matchedEvent = findEventIndexForPin(pin);
+        if (matchedEvent) {
+          window.requestAnimationFrame(() => {
+            scrollToEvent(matchedEvent.dayIndex, matchedEvent.eventIndex);
+          });
+        }
       });
 
       marker.setMap(mapRef.current);
       markersRef.current.push(marker);
     });
-  }, [isMapLoaded, orderedPins, activeDayIndex, mapZoom, resolvedCenter.lng, resolvedCenter.lat]);
+
+    if (!hasInitialFitRef.current && markersRef.current.length > 0) {
+      mapRef.current.setFitView(markersRef.current);
+      const nextZoom = mapRef.current.getZoom();
+      const center = mapRef.current.getCenter();
+      const nextCenter = {
+        lng: typeof center?.getLng === 'function' ? center.getLng() : center.lng,
+        lat: typeof center?.getLat === 'function' ? center.getLat() : center.lat,
+      };
+      setMapZoom(nextZoom);
+      setMapCenter(nextCenter);
+      hasInitialFitRef.current = true;
+    }
+  }, [isMapLoaded, orderedPins, selectedPinKey, focusedPinKey, activeDayIndex, mapZoom, resolvedCenter.lng, resolvedCenter.lat, findEventIndexForPin, scrollToEvent]);
 
   const handleZoomIn = () => setMapZoom((z) => Math.min(18, z + 1));
   const handleZoomOut = () => setMapZoom((z) => Math.max(3, z - 1));
@@ -657,18 +827,37 @@ const ItineraryPage: React.FC<ItineraryPageProps> = ({ onMyTrips, onHome }) => {
                       <div className="space-y-8 z-1">
                         {(day?.timeline || []).map((event: any, index: number) => {
                           const isExtra = Boolean(event?.isExtra);
+                          const linkedPin = findPinForEvent(dayIndex, event);
+                          const isActive = linkedPin?.__key === focusedPinKey;
                           return (
                             <div key={`${dayIndex}-${index}`} className="relative pl-8 group">
                               <div
-                                className={`absolute left-[11px] top-4 size-4 bg-white dark:bg-background-dark border-4 rounded-full z-10 transition-colors ${isExtra
-                                  ? 'border-amber-300 dark:border-amber-700'
-                                  : 'border-slate-300 dark:border-slate-600 group-hover:border-primary'
+                                className={`absolute left-[11px] top-4 size-4 bg-white dark:bg-background-dark border-4 rounded-full z-10 transition-colors ${isActive
+                                  ? 'border-primary'
+                                  : isExtra
+                                    ? 'border-amber-300 dark:border-amber-700'
+                                    : 'border-slate-300 dark:border-slate-600 group-hover:border-primary'
                                   }`}
                               ></div>
                               <div
+                                ref={(el) => {
+                                  if (!timelineEventRefs.current[dayIndex]) {
+                                    timelineEventRefs.current[dayIndex] = [];
+                                  }
+                                  timelineEventRefs.current[dayIndex][index] = el;
+                                }}
+                                onClick={() => {
+                                  if (linkedPin) {
+                                    // Timeline click -> focus but NO details
+                                    focusPin(linkedPin, false);
+                                  }
+                                }}
                                 className={`p-4 rounded-xl shadow-sm border transition-all cursor-pointer ${isExtra
                                   ? 'bg-amber-50/70 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 hover:border-amber-300'
                                   : 'bg-white dark:bg-surface-dark border-slate-100 dark:border-slate-800 hover:shadow-md hover:border-primary/30'
+                                  } ${isActive
+                                    ? 'ring-2 ring-primary/30 border-primary/40 bg-primary/5 dark:bg-primary/10'
+                                    : ''
                                   }`}
                               >
                                 <div className="flex justify-between items-start mb-2">
