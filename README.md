@@ -11,9 +11,11 @@
   - `pip install -r requirements.txt`
 - 配置环境变量（本地）
   - 复制 `/.env.example` 为 `/.env`，填入真实 Key
-  - `DEEPSEEK_API_KEY`：LLM
-  - `AMAP_KEY`：高德地图 API
-  - `SERPER_API_KEY`：Serper 搜索
+  - `DEEPSEEK_API_KEY`：LLM API Key
+  - `DEEPSEEK_API_BASE`：LLM Base URL (可选，默认为 https://api.deepseek.com/v1)
+  - `LLM_MODEL`：模型名称 (可选，默认为 deepseek-chat)
+  - `AMAP_KEY`：高德地图 API Key
+  - `SERPER_API_KEY`：Serper 搜索 API Key
 - 运行
   - `python main.py`
 
@@ -59,6 +61,7 @@ my.travel-line/
 ├── tools/
 │   └── map_tools.py            # 高德地图工具 + 路线优化
 ├── data_pipeline/
+│   ├── config.py               # 数据管道配置 (POI类型等)
 │   ├── fetch_pois.py           # 拉取 POI
 │   ├── clean_data.py           # 清洗 POI
 │   ├── vectorize_data.py       # 向量化写入 ChromaDB
@@ -66,8 +69,8 @@ my.travel-line/
 │   └── data/                   # 产出数据与向量库
 └── front-end/
     ├── App.tsx                 # 页面状态机
-    ├── pages/                  # 页面集合
-    ├── contexts/               # 设置上下文
+    ├── pages/                  # 页面集合 (Landing, Location, Preferences, Itinerary, MyTrips)
+    ├── contexts/               # 全局状态 (SettingsContext - 主题/多语言)
     ├── types.ts                # 类型定义
     └── package.json            # Vite 配置与脚本
 ```
@@ -75,7 +78,11 @@ my.travel-line/
 ## 3. 实现功能及其对应逻辑
 
 ### 3.1 智能行程生成
-- `server.py` 提供 REST API 接口，对接前端请求
+- `server.py` 提供 REST API 接口，对接前端请求：
+  - `GET /api/search-suggestions`: 高德输入提示，用于地点搜索补全
+  - `GET /api/recommend-locations`: 根据城市和兴趣标签推荐 POI
+  - `POST /api/generate-itinerary`: 核心接口，调用 CrewAI 生成结构化行程
+  - `GET /api/static-map`: 代理高德静态地图 API
 - `agents.py` 中定义两个角色：
   - 调研员：搜索并返回核心景点与基础信息
   - 规划师：组织路线并优化行程顺序
@@ -97,8 +104,10 @@ my.travel-line/
 - `vectorize_data.py`：使用 `sentence-transformers` 生成向量并存入 ChromaDB
 
 ### 3.4 前端交互
-前端已完成与后端 API 的对接：
+前端已完成与后端 API 的对接，并支持**国际化 (i18n)** 与 **深色模式**：
 
+- **全局功能**：
+  - `SettingsContext` 管理中英文切换 (`en`/`zh`) 与明暗主题 (`light`/`dark`)。
 - **LandingPage**：
   - 接入高德输入提示 API（通过后端代理），实现零成本、低延迟的地点搜索补全。
 - **LocationSelectionPage**：
@@ -107,6 +116,8 @@ my.travel-line/
   - 收集用户偏好（预算、餐饮、交通等），调用 `/api/generate-itinerary` 触发后端 CrewAI 任务。
 - **ItineraryPage**：
   - 接收并解析后端生成的结构化 JSON 数据，动态渲染地图 Pin 点、路线概览和每日时间轴。
+- **MyTripsPage**：
+  - 展示历史行程列表（目前为 Mock 数据），支持查看行程详情入口。
 
 ## 4. 技术栈与组织逻辑
 
